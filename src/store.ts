@@ -2,7 +2,7 @@ import { create } from "zustand";
 import type { VaultFS } from "./lib/fs/types";
 import { MemoryFS } from "./lib/fs/memory";
 import { TauriFS } from "./lib/fs/tauri";
-import { getPref, isTauri, setPref } from "./lib/platform";
+import { errorText, getPref, isTauri, setPref } from "./lib/platform";
 import { sampleVault } from "./lib/sample";
 import {
   createGrant,
@@ -137,26 +137,43 @@ export const useStore = create<State>((set, get) => {
     return r.projectId;
   };
 
-  const attach = async (fs: VaultFS) => {
-    unwatch?.();
-    unwatch = null;
-    set({ fs, loading: true, error: null });
+  /** Open a vault. On failure, keep whatever was open before and report why. Returns true on success. */
+  const attach = async (fs: VaultFS): Promise<boolean> => {
+    const prev = { fs: get().fs, data: get().data };
+    set({ loading: true, error: null });
+    let data: VaultData;
     try {
       await initVault(fs);
-      const data = await loadVault(fs);
-      set({ data, loading: false });
-      const saved = getPref("clientFilter") ?? "";
-      if (saved && !data.clients.some((c) => c.slug === saved)) set({ clientFilter: "" });
+      data = await loadVault(fs);
+    } catch (e) {
+      const why = errorText(e);
+      set({
+        ...prev,
+        loading: false,
+        error: /forbidden|not allowed|scope|denied/i.test(why)
+          ? `Many Apply wasn't given access to that folder. Choose it again. (${why})`
+          : `Couldn't open that folder: ${why}`,
+      });
+      return false;
+    }
+    unwatch?.();
+    unwatch = null;
+    set({ fs, data, loading: false, drawer: null, route: { screen: "dashboard" } });
+    const saved = getPref("clientFilter") ?? "";
+    if (saved && !data.clients.some((c) => c.slug === saved)) set({ clientFilter: "" });
+    try {
       unwatch = await fs.watch(
         debounce(() => {
           if (Date.now() - lastOwnWrite < 1500) return;
           void get().reload();
         }, 500),
       );
-      writeIcs();
     } catch (e) {
-      set({ loading: false, error: (e as Error).message });
+      // Watching is a nice-to-have; the vault still works without it.
+      console.warn("Folder watching unavailable:", errorText(e));
     }
+    writeIcs();
+    return true;
   };
 
   return {
@@ -174,8 +191,8 @@ export const useStore = create<State>((set, get) => {
     async openVault(path) {
       if (!path) return;
       if (!isTauri) return get().openDemo();
-      setPref("vault", path);
-      await attach(new TauriFS(path));
+      if (await attach(new TauriFS(path))) setPref("vault", path);
+      else if (get().data) get().toast(get().error ?? "Couldn't open that folder", "error");
     },
     async openDemo(reset = false) {
       if (reset) MemoryFS.reset();
@@ -183,8 +200,7 @@ export const useStore = create<State>((set, get) => {
       const fs = new MemoryFS(files);
       const old = Date.now() - 10 * 86400000;
       for (const p of staleDrafts) fs.touch(p, old);
-      if (!isTauri) setPref("vault", "demo");
-      await attach(fs);
+      if ((await attach(fs)) && !isTauri) setPref("vault", "demo");
     },
     closeVault() {
       unwatch?.();
