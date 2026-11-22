@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useStore } from "../store";
 import {
-  MenuButton,
   ClientSelect,
   FunderSelect,
   InlineDate,
@@ -28,14 +27,13 @@ import {
   type Question,
   type ReportDate,
 } from "../lib/model";
-import { addQuestionToBody, bodySection, listAttachments, parseQuestions, readDraft, setBodySection, GRANT_ORDER } from "../lib/vault";
+import { addQuestionToBody, bodySection, parseQuestions, readDraft, setBodySection, GRANT_ORDER } from "../lib/vault";
 import { budgetTotals, parseBudgetCsv } from "../lib/budget";
 import { suggestFor } from "../lib/library";
 import { fmtDate, fmtMinutes, fmtMoney, slugify, todayISO, wordCount } from "../lib/util";
-import { copyToClipboard, errorText, openExternal, saveFile } from "../lib/platform";
-import { recordSampleUsedIn, removeSampleUsedIn, sampleCaption, samplesForClient, SAMPLE_KIND_LABEL } from "../lib/samples";
+import { errorText, openExternal, saveFile } from "../lib/platform";
 import { buildReviewDocx, reviewFileName } from "../lib/reviewExport";
-import { SampleThumb } from "./samples";
+import { Materials } from "./Materials";
 
 const openExternalSafe = (u: string) => void openExternal(u).catch(() => {});
 
@@ -179,7 +177,7 @@ export function GrantDrawer({ folder }: { folder: string }) {
 
       <Questions g={g} />
 
-      <WorkSamples g={g} />
+      <Materials g={g} />
 
       <BudgetSummary g={g} />
 
@@ -194,7 +192,6 @@ export function GrantDrawer({ folder }: { folder: string }) {
       </section>
 
       <Todoist g={g} />
-      <Attachments folder={folder} />
 
       <section>
         <h3>Status history</h3>
@@ -734,131 +731,6 @@ function Todoist({ g }: { g: Grant }) {
               Task {id.slice(-6)}
             </a>
           ))}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function Attachments({ folder }: { folder: string }) {
-  const fs = useStore((s) => s.fs);
-  const [files, setFiles] = useState<string[]>([]);
-  useEffect(() => {
-    if (fs) void listAttachments(fs, folder).then(setFiles).catch(() => setFiles([]));
-  }, [fs, folder]);
-  return (
-    <section>
-      <h3>Attachments</h3>
-      {files.length ? (
-        <ul className="small" style={{ margin: 0, paddingLeft: 18 }}>
-          {files.map((f) => (
-            <li key={f}>{f}</li>
-          ))}
-        </ul>
-      ) : (
-        <p className="muted small" style={{ margin: 0 }}>
-          Put award letters, contracts and other files for this application in <code>grants/{folder}/attachments/</code>.
-        </p>
-      )}
-    </section>
-  );
-}
-
-
-// ------------------------------------------------------------------ Work samples
-
-function WorkSamples({ g }: { g: Grant }) {
-  const samples = useStore((s) => s.data?.samples ?? []);
-  const update = useStore((s) => s.updateGrant);
-  const mutate = useStore((s) => s.mutate);
-  const open = useStore((s) => s.openDrawer);
-  const go = useStore((s) => s.go);
-  const toast = useStore((s) => s.toast);
-  const chosen = g.fm.work_samples;
-  const available = samplesForClient(samples, g.fm.client).filter((s) => !chosen.includes(s.path));
-
-  const setChosen = (next: string[]) => update(g.folder, (x) => ({ ...x, fm: { ...x.fm, work_samples: next } }));
-  const add = async (path: string) => {
-    const s = samples.find((x) => x.path === path);
-    await setChosen([...chosen, path]);
-    if (s) await mutate((fs) => recordSampleUsedIn(fs, s, g.folder));
-  };
-  const remove = async (path: string) => {
-    const s = samples.find((x) => x.path === path);
-    await setChosen(chosen.filter((p) => p !== path));
-    if (s) await mutate((fs) => removeSampleUsedIn(fs, s, g.folder));
-  };
-  const move = (i: number, d: -1 | 1) => {
-    const next = [...chosen];
-    const j = i + d;
-    if (j < 0 || j >= next.length) return;
-    [next[i], next[j]] = [next[j], next[i]];
-    void setChosen(next);
-  };
-
-  return (
-    <section>
-      <h3>
-        Work samples <span className="spacer" />
-        {chosen.length > 0 && (
-          <button
-            className="btn small ghost"
-            title="Copy a numbered list of captions, for the application's work sample list"
-            onClick={async () => {
-              const lines = chosen.map((p, i) => {
-                const s = samples.find((x) => x.path === p);
-                return s ? `${i + 1}. ${[sampleCaption(s), s.body.trim(), s.fm.url].filter(Boolean).join(" ")}` : "";
-              });
-              await copyToClipboard(lines.filter(Boolean).join("\n"));
-              toast("Copied sample list");
-            }}
-          >
-            Copy list
-          </button>
-        )}
-        <MenuButton
-          label="+ Add sample"
-          className="btn small ghost"
-          items={[
-            ...available.map((s) => ({
-              label: (
-                <span>
-                  {s.fm.title} <span className="muted small">{SAMPLE_KIND_LABEL[s.fm.kind]}{s.fm.year ? ` · ${s.fm.year}` : ""}</span>
-                </span>
-              ),
-              run: () => void add(s.path),
-            })),
-            { label: <span className="muted">Open Work samples in the Library…</span>, run: () => go({ screen: "library" }) },
-          ]}
-        />
-      </h3>
-      {chosen.length === 0 ? (
-        <p className="muted small" style={{ margin: 0 }}>
-          No samples chosen yet. Pick from this client's work samples (and Shared) so you know exactly what this funder saw.
-        </p>
-      ) : (
-        <div className="stack" style={{ gap: 6 }}>
-          {chosen.map((p, i) => {
-            const s = samples.find((x) => x.path === p);
-            return (
-              <div key={p} className="panel row" style={{ padding: "6px 10px" }}>
-                <span className="muted num">{i + 1}.</span>
-                {s ? (
-                  <>
-                    <div style={{ width: 44 }}><SampleThumb s={s} size={36} /></div>
-                    <a href="#" className="grow ellipsis" onClick={(e) => { e.preventDefault(); open({ kind: "sample", id: p }); }}>
-                      {sampleCaption(s)}
-                    </a>
-                  </>
-                ) : (
-                  <span className="grow muted small ellipsis" title="This sample was moved or deleted">{p} (missing)</span>
-                )}
-                <button className="icon-btn" title="Move up" disabled={i === 0} onClick={() => move(i, -1)}>↑</button>
-                <button className="icon-btn" title="Move down" disabled={i === chosen.length - 1} onClick={() => move(i, 1)}>↓</button>
-                <button className="icon-btn" title="Remove from this application" onClick={() => void remove(p)}>×</button>
-              </div>
-            );
-          })}
         </div>
       )}
     </section>

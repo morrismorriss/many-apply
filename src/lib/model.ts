@@ -92,6 +92,10 @@ export interface GrantFM {
   reports: ReportDate[];
   /** Work samples sent with this application, as paths relative to samples/. */
   work_samples: string[];
+  /** Library answers attached to this application, as paths relative to library/. */
+  library_items: string[];
+  /** Documents (W-9, 501(c)(3) letter…) sent with this application, as paths relative to documents/. */
+  documents: string[];
   created: string;
   updated: string;
   status_history: StatusEvent[];

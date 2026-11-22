@@ -5,6 +5,7 @@
 import { parseFrontmatter, stringifyFrontmatter } from "./frontmatter";
 import { basename, dirname, joinPath, type VaultFS } from "./fs/types";
 import { extOf } from "./samples";
+import { moveWithFile, renameGrantReferences } from "./move";
 import { asArray, daysUntil, slugify, str } from "./util";
 
 export const DOC_TYPES = [
@@ -141,28 +142,13 @@ export async function setDocumentFile(
   return next;
 }
 
-/** Move a document (and its file) into another client's folder. Returns the moved document. */
+/** Move a document (and its file) into another client's folder, keeping applications that list it pointed at it. */
 export async function moveDocument(fs: VaultFS, d: VaultDocument, owner: string): Promise<VaultDocument> {
   if (documentOwner(d) === owner) return d;
-  await fs.mkdir(`documents/${owner}`);
-  const stem = basename(d.path).replace(/\.md$/, "");
-  const ext = d.fm.file ? extOf(d.fm.file) : "";
-  const fileStem = d.fm.file ? d.fm.file.replace(/\.[^.]+$/, "") : "";
-  const taken = async (b: string, f: string) =>
-    (await fs.exists(`documents/${owner}/${b}.md`)) || (!!f && (await fs.exists(`documents/${owner}/${f}`)));
-  let base = stem;
-  let file = d.fm.file;
-  for (let i = 2; await taken(base, file); i++) {
-    base = `${stem}-${i}`;
-    // Keep a file named after its document in step; any other name just gets the same suffix.
-    file = d.fm.file ? `${fileStem === stem ? base : `${fileStem}-${i}`}${ext ? `.${ext}` : ""}` : "";
-  }
-  const oldFile = documentFilePath(d);
-  if (oldFile && (await fs.exists(oldFile))) await fs.rename(oldFile, `documents/${owner}/${file}`);
-  else file = d.fm.file;
-  const next: VaultDocument = { ...d, path: `${owner}/${base}.md`, fm: { ...d.fm, file } };
+  const moved = await moveWithFile(fs, "documents", d.path, d.fm.file, owner);
+  const next: VaultDocument = { ...d, path: moved.path, fm: { ...d.fm, file: moved.file } };
   await writeDocument(fs, next);
-  await fs.remove(`documents/${d.path}`);
+  await renameGrantReferences(fs, "documents", d.path, next.path);
   return next;
 }
 

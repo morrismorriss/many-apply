@@ -415,6 +415,7 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 20px 0; }
 .sample-preview.empty { flex-direction: column; gap: 8px; padding: 28px 14px; text-align: center; }
 .sample-drop { border-radius: var(--radius); min-height: 220px; }
 .sample-drop.over { outline: 2px dashed var(--accent); outline-offset: 4px; background: var(--accent-soft); }
+.drop-over { outline: 2px dashed var(--accent); outline-offset: 4px; background: var(--accent-soft); border-radius: 8px; }
 .lib-tabs { margin: -8px 0 16px; }
 
 /* Opportunity feeds */

@@ -438,3 +438,26 @@ describe("moveDocument", () => {
     expect(await fs.exists("documents/me/w-9-2026.pdf")).toBe(false);
   });
 });
+
+describe("moving Library items keeps applications linked", () => {
+  it("updates library_items, work_samples and documents on grants", async () => {
+    const { createLibraryItem, moveLibraryItem, loadVault } = await import("../src/lib/vault");
+    const { createSample, moveSample } = await import("../src/lib/samples");
+    const { createDocument, moveDocument } = await import("../src/lib/documents");
+    const fs = new MemoryFS();
+    await fs.writeText("clients/me.md", "---\nname: Me\n---\n");
+    const item = await createLibraryItem(fs, "me", "Bio");
+    const sample = await createSample(fs, "me", { title: "Clip", file: { name: "clip.mp4", copyTo: (p) => fs.writeBytes(p, new Uint8Array([1])) } });
+    const doc = await createDocument(fs, "me", { title: "W-9" });
+    const g = await createGrant(fs, { title: "X", funder: "f", deadline: "2027-01-01", library_items: [item.path], work_samples: [sample.path], documents: [doc.path] } as never);
+    const newItem = await moveLibraryItem(fs, item.path, "shared");
+    const newSample = await moveSample(fs, sample, "shared");
+    const newDoc = await moveDocument(fs, doc, "lakeside");
+    const data = await loadVault(fs);
+    const after = data.grants.find((x) => x.folder === g.folder)!;
+    expect(after.fm.library_items).toEqual([newItem]);
+    expect(after.fm.work_samples).toEqual([newSample.path]);
+    expect(after.fm.documents).toEqual([newDoc.path]);
+    expect(await fs.exists("samples/shared/clip.mp4")).toBe(true);
+  });
+});

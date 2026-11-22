@@ -1,7 +1,9 @@
 import { useStore } from "../store";
 import { InlineText, MenuButton, TagInput } from "./ui";
 import { confirmAction } from "./dialogs";
-import { createLibraryItem, trash } from "../lib/vault";
+import { createLibraryItem, moveLibraryItem, trash } from "../lib/vault";
+import { dirname } from "../lib/fs/types";
+import { errorText } from "../lib/platform";
 import { wordCount } from "../lib/util";
 
 export function LibraryDrawer({ path }: { path: string }) {
@@ -15,8 +17,27 @@ export function LibraryDrawer({ path }: { path: string }) {
   const open = useStore((s) => s.openDrawer);
   const close = useStore((s) => s.closeDrawer);
   const toast = useStore((s) => s.toast);
+  const folders = useStore((s) => s.data?.libraryFolders ?? []);
   if (!item) return <p className="muted">This item isn't in the Library any more.</p>;
   const owner = path.split("/")[0];
+  const here = dirname(path);
+  const rootName = (slug: string) => (slug === "shared" ? "Shared" : clients.find((c) => c.slug === slug)?.fm.name ?? slug);
+  const folderLabel = (f: string) => f.split("/").map((p, i) => (i === 0 ? rootName(p) : p.replace(/-/g, " "))).join(" / ");
+  const choices = [...new Set(["shared", ...clients.map((c) => c.slug), ...folders, here])].sort((a, b) => {
+    const ra = a.split("/")[0], rb = b.split("/")[0];
+    const rank = (r: string) => (r === "shared" ? 0 : r === "me" ? 1 : 2);
+    return rank(ra) - rank(rb) || folderLabel(a).localeCompare(folderLabel(b));
+  });
+  const move = async (to: string) => {
+    if (to === here) return;
+    try {
+      const dest = await mutate((fs) => moveLibraryItem(fs, path, to));
+      open({ kind: "library", id: dest });
+      toast(`Moved to ${folderLabel(to)}`);
+    } catch (e) {
+      toast(`Couldn't move it: ${errorText(e)}`, "error");
+    }
+  };
 
   return (
     <div>
@@ -28,6 +49,12 @@ export function LibraryDrawer({ path }: { path: string }) {
       </div>
       <section>
         <div className="props">
+          <div className="k">Folder</div>
+          <div className="v">
+            <select className="select inline" aria-label="Folder" value={here} onChange={(e) => void move(e.target.value)}>
+              {choices.map((f) => <option key={f} value={f}>{folderLabel(f)}</option>)}
+            </select>
+          </div>
           <div className="k">Tags</div>
           <div className="v">
             <TagInput value={item.fm.tags} suggestions={allTags} onSave={(tags) => save({ ...item, fm: { ...item.fm, tags } })} />

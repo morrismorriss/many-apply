@@ -2,6 +2,7 @@
 // Each sample is a markdown file in samples/<owner>/ (owner = "shared" or a client's slug),
 // with the media file it describes saved next to it. Like the Library, one client's samples
 // are never offered for another client's application.
+import { moveWithFile, renameGrantReferences } from "./move";
 import { parseFrontmatter, stringifyFrontmatter } from "./frontmatter";
 import { basename, dirname, joinPath, type VaultFS } from "./fs/types";
 import { asArray, slugify, str } from "./util";
@@ -208,6 +209,16 @@ export async function duplicateSample(fs: VaultFS, s: WorkSample, toFolder: stri
     await writeSample(fs, next);
     return next;
   });
+}
+
+/** Move a sample (and its file) to another owner's folder, keeping applications that list it pointed at it. */
+export async function moveSample(fs: VaultFS, s: WorkSample, owner: string): Promise<WorkSample> {
+  if (sampleOwner(s) === owner) return s;
+  const moved = await moveWithFile(fs, "samples", s.path, s.fm.file, owner);
+  const next: WorkSample = { ...s, path: moved.path, fm: { ...s.fm, file: moved.file } };
+  await writeSample(fs, next);
+  await renameGrantReferences(fs, "work_samples", s.path, next.path);
+  return next;
 }
 
 /** Paths (vault-relative) to move to trash when a sample is deleted. */
