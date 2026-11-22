@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { STATUS_LABEL, type Grant, type Status } from "../lib/model";
 import { useLookups, useStore } from "../store";
 import { daysUntil, fmtDate, fmtMoney } from "../lib/util";
@@ -138,35 +139,92 @@ export function MenuButton({ label, items, className = "btn", title }: {
   title?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<CSSProperties | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // The menu is drawn over the whole window (not inside the drawer or panel the button is in),
+  // so it's never cut off. It opens upward when there's more room above.
+  useLayoutEffect(() => {
+    if (!open) {
+      setPos(null);
+      return;
+    }
+    const place = () => {
+      const btn = ref.current?.getBoundingClientRect();
+      const menu = menuRef.current;
+      if (!btn || !menu) return;
+      const gap = 4;
+      const margin = 8;
+      const below = window.innerHeight - btn.bottom - gap - margin;
+      const above = btn.top - gap - margin;
+      const natural = Math.min(menu.scrollHeight, 360);
+      const up = natural > below && above > below;
+      const maxHeight = Math.max(120, Math.min(360, up ? above : below));
+      const width = Math.max(menu.offsetWidth, 200);
+      // Line the menu's right edge up with the button's, then keep it on screen.
+      const left = Math.min(Math.max(margin, btn.right - width), window.innerWidth - width - margin);
+      setPos({
+        position: "fixed",
+        left,
+        maxHeight,
+        ...(up ? { bottom: window.innerHeight - btn.top + gap } : { top: btn.bottom + gap }),
+      });
+    };
+    place();
+    const close = (e: Event) => {
+      // Scrolling inside the menu itself is fine; scrolling the page would leave it floating.
+      if (e.type === "scroll" && menuRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [open, items.length]);
+
   useEffect(() => {
     if (!open) return;
-    const h = (e: MouseEvent) => ref.current && !ref.current.contains(e.target as Node) && setOpen(false);
+    const h = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (!ref.current?.contains(t) && !menuRef.current?.contains(t)) setOpen(false);
+    };
+    const k = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
     document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
+    document.addEventListener("keydown", k);
+    return () => {
+      document.removeEventListener("mousedown", h);
+      document.removeEventListener("keydown", k);
+    };
   }, [open]);
+
   return (
     <div ref={ref} style={{ position: "relative", display: "inline-block" }}>
-      <button className={className} title={title} onClick={() => setOpen(!open)}>
+      <button className={className} title={title} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
         {label}
       </button>
-      {open && (
-        <div className="menu" style={{ right: 0, top: "calc(100% + 4px)" }}>
-          {items.length === 0 && <div className="muted small" style={{ padding: 8 }}>Nothing here yet</div>}
-          {items.map((it, i) => (
-            <button
-              key={i}
-              disabled={it.disabled}
-              onClick={() => {
-                setOpen(false);
-                it.run();
-              }}
-            >
-              {it.label}
-            </button>
-          ))}
-        </div>
-      )}
+      {open &&
+        createPortal(
+          <div ref={menuRef} className="menu" role="menu" style={pos ?? { position: "fixed", top: -9999, left: -9999 }}>
+            {items.length === 0 && <div className="muted small" style={{ padding: 8 }}>Nothing here yet</div>}
+            {items.map((it, i) => (
+              <button
+                key={i}
+                role="menuitem"
+                disabled={it.disabled}
+                onClick={() => {
+                  setOpen(false);
+                  it.run();
+                }}
+              >
+                {it.label}
+              </button>
+            ))}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
