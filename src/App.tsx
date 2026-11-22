@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect } from "react";
 import { useStore } from "./store";
 import { Sidebar } from "./components/Sidebar";
 import { Drawer } from "./components/Drawer";
@@ -7,6 +7,7 @@ import { Dashboard } from "./screens/Dashboard";
 import { Research } from "./screens/Research";
 import { Pipeline } from "./screens/Pipeline";
 import { CalendarScreen } from "./screens/Calendar";
+import { Documents } from "./screens/Documents";
 import { Library } from "./screens/Library";
 import { Funders } from "./screens/Funders";
 import { Clients } from "./screens/Clients";
@@ -20,6 +21,7 @@ import { Welcome } from "./screens/Welcome";
 import { getPref, isTauri } from "./lib/platform";
 import { startExtensionBridge } from "./lib/bridge";
 import type { Settings } from "./lib/model";
+import { applyDataColors } from "./lib/charts";
 
 function applyTheme(s: Settings | undefined) {
   const root = document.documentElement;
@@ -60,7 +62,11 @@ export default function App() {
     else if (last && isTauri) void st.openVault(last);
   }, []);
 
-  useEffect(() => applyTheme(data?.settings), [data?.settings]);
+  // Layout effect, so CSS colours are on the page before anything paints with them.
+  useLayoutEffect(() => {
+    applyTheme(data?.settings);
+    applyDataColors(data?.settings.dataColors);
+  }, [data?.settings]);
 
   useEffect(() => {
     if (!isTauri || !data) return;
@@ -94,6 +100,7 @@ export default function App() {
     case "pipeline": screen = <Pipeline />; break;
     case "calendar": screen = <CalendarScreen />; break;
     case "library": screen = <Library />; break;
+    case "documents": screen = <Documents />; break;
     case "funders": screen = <Funders />; break;
     case "clients": screen = <Clients />; break;
     case "giving": screen = <Giving />; break;

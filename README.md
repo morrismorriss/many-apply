@@ -26,16 +26,18 @@ On first launch, choose a folder for your vault (an empty folder is fine), or ex
 | Dashboard | Active applications, deadlines in 30 days, requested and awarded this year, win rate. A 90-day deadline timeline, a pipeline chart, and a Needs Attention list. |
 | Research | Everything with status `researching`, as cards or a list. Quick-add with paste-in pattern matching for dates, amounts and links. Star, filter, "Move to Pipeline". |
 | Pipeline | Kanban board by status (drag to change status) or a sortable table. |
-| Grant drawer | Opens from any list. Every field editable inline, questions with word-count meters and drafts, Library suggestions, reporting dates, budget summary, Todoist tasks, status history. Pin it open or expand it to full screen. |
+| Grant drawer | Opens from any list. Every field editable inline, questions with word-count meters and drafts, Library suggestions, the work samples sent with it, reporting dates, budget summary, Todoist tasks, status history. Pin it open or expand it to full screen. "Export for review" saves every question and draft (plus the work sample list and budget summary) as one Word document, to send a client to comment on or edit with tracked changes. |
 | Draft editor | A calm writing surface with a word or character limit meter, "Insert from Library" (records `used_in`) and "Insert field" for client profile fields. |
 | Budget builder | Line items with optional quantity × rate, categories, types (Expense, Income, In-kind), live totals and gap, "set amount requested from the gap", a warning over the funder's max, CSV export with totals, copy as a table, templates. Saved as `budget.csv`. |
 | Calendar | Month and agenda views of deadlines, submissions, expected decisions and report due dates. `.ics` export, plus a live `.manyapply/calendar.ics` you can subscribe to. |
-| Library | Reusable answers in a folder tree: Shared, plus one folder per client, plus any subfolders you add. Drag to move, "Duplicate to…" another client. |
+| Library | **Answers:** reusable writing in a folder tree: Shared, plus one folder per client, plus any subfolders you add. Drag to move, "Duplicate to…" another client. **Work samples:** images, video, audio, PDFs and links (Vimeo, YouTube, SoundCloud…) with year, medium, dimensions or running time, credits and a description. Drop files in, preview and play them in the app, copy a caption, and see which applications each sample was sent with. |
+| Documents | Contracts, tax forms and legal paperwork applications ask for again and again: W-9, 501(c)(3) letter, fiscal sponsor agreement, insurance certificates, tax returns. Upload or drop files, set an expiry date and the Dashboard warns you before it runs out. A note on the screen explains who can see these files if your vault syncs through Dropbox or iCloud. Never included in "Share client folder". |
+| Opportunity feeds | A panel you open from the sidebar with new grants and open calls from RSS and Atom feeds, with a badge for new items. Starts with Grants.gov (filtered to the arts), ArtDeadline and NYC Playwrights; turn any of them off, filter by keywords, or add your own feeds. "Save to Research" turns an item into an opportunity, with any deadline and amount it can spot. Feeds are only read; nothing about you is sent. |
 | Funders | Every funder with totals (applied, awarded, win rate) and every grant sent to them. |
 | Clients | For freelance grant writers. A client switcher at the top of the sidebar filters every screen. Profiles, per-client budget templates and Todoist projects, and "Share client folder" as a zip. |
 | Reports | Requested vs. awarded by year, win rate by type and funder type, funding by funder, a deadline heatmap, average days to decision. Filter by year, tag, project and client. CSV export. |
 | Import | A plain-language guide next to a CSV importer for Notion, Google Sheets, Excel and Airtable exports: column matching, status matching, preview with warnings and duplicate detection, saved mappings, one-click undo. Export everything back to CSV. |
-| Settings | Vault folder, themes (light, dark, pink, build your own), Todoist token (kept in the OS keychain), prep-task template, backup to zip, Chrome extension pairing. |
+| Settings | Vault folder, themes (light, dark, pink, build your own), chart and status colors (palettes, or pick each one), Todoist token (kept in the OS keychain), prep-task template, backup to zip, Chrome extension pairing. |
 
 ## The vault
 
@@ -56,6 +58,15 @@ Many Apply/
     me/
     lakeside-youth-theater/
     budgets/              (budget templates, as CSV)
+  samples/                (work samples: a .md file per sample, with its media file next to it)
+    shared/
+    me/
+      river-suite.md
+      river-suite.jpg
+  documents/              (contracts, tax and legal files: a .md file per document, with its file next to it)
+    me/
+      w-9.md
+      w-9.pdf
   funders/
     pittsburgh-foundation.md
   .manyapply/

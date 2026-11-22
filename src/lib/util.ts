@@ -149,3 +149,11 @@ export function fmtMinutes(m: number): string {
   const r = Math.round(m % 60);
   return h ? (r ? `${h}h ${r}m` : `${h}h`) : `${r}m`;
 }
+
+/**
+ * Text for display in the app's font. Hauora Sans always draws "(c)" as ©, which turns "501(c)(3)"
+ * into "501©(3)". An invisible zero-width non-joiner stops that. Never save the result to a file.
+ */
+export function displayText(s: string): string {
+  return s.replace(/\(([cC])\)/g, "(\u200C$1)");
+}

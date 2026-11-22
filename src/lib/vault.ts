@@ -19,11 +19,14 @@ import {
 } from "./model";
 import { asArray, parseNumber, slugify, str, todayISO, wordCount } from "./util";
 import { readDonor, type Donor } from "./donors";
+import { readSample, type WorkSample } from "./samples";
+import { readDocument, type VaultDocument } from "./documents";
+import { mergeFeeds } from "./feeds";
 
 export const GRANT_ORDER = [
   "title", "client", "funder", "url", "type", "status", "starred", "amount_requested", "amount_awarded",
   "max_award", "currency", "deadline", "deadline_type", "project", "location", "tags", "submitted_on",
-  "decision_expected", "decision_on", "todoist_task_ids", "reports", "created", "updated", "status_history", "time_log",
+  "decision_expected", "decision_on", "todoist_task_ids", "reports", "work_samples", "created", "updated", "status_history", "time_log",
 ];
 const FUNDER_ORDER = ["name", "website", "funder_type", "contacts", "notes"];
 const CLIENT_ORDER = [
@@ -38,6 +41,8 @@ export interface VaultData {
   clients: Client[];
   donors: Donor[];
   library: LibraryItem[];
+  samples: WorkSample[];
+  documents: VaultDocument[];
   libraryFolders: string[]; // relative to library/, excluding budgets
   budgetTemplates: string[]; // file names in library/budgets
   settings: Settings;
@@ -95,6 +100,7 @@ export function normalizeGrant(raw: Record<string, unknown>, folder: string): Gr
     decision_on: dateStr(raw.decision_on),
     todoist_task_ids: asArray(raw.todoist_task_ids),
     reports,
+    work_samples: asArray(raw.work_samples),
     created: dateStr(raw.created) || todayISO(),
     updated: dateStr(raw.updated) || todayISO(),
     status_history: history.length ? history : [{ status, date: dateStr(raw.created) || todayISO() }],
@@ -245,6 +251,8 @@ export async function loadVault(fs: VaultFS): Promise<VaultData> {
   const clientFiles: string[] = [];
   const donorFiles: string[] = [];
   const libFiles: string[] = [];
+  const sampleFiles: string[] = [];
+  const docFiles: string[] = [];
 
   for (const e of entries) {
     const parts = e.path.split("/");
@@ -259,6 +267,10 @@ export async function loadVault(fs: VaultFS): Promise<VaultData> {
       clientFiles.push(e.path);
     } else if (parts[0] === "donors" && parts.length === 2 && e.path.endsWith(".md")) {
       donorFiles.push(e.path);
+    } else if (parts[0] === "samples" && parts.length >= 3 && !e.isDir && e.path.endsWith(".md")) {
+      sampleFiles.push(e.path);
+    } else if (parts[0] === "documents" && parts.length >= 3 && !e.isDir && e.path.endsWith(".md")) {
+      docFiles.push(e.path);
     } else if (parts[0] === "library" && parts.length >= 2) {
       const rel = parts.slice(1).join("/");
       if (parts[1] === "budgets") {
@@ -292,6 +304,12 @@ export async function loadVault(fs: VaultFS): Promise<VaultData> {
   const funders = await Promise.all(funderFiles.map((p) => readFunder(fs, p)));
   const clients = await Promise.all(clientFiles.map((p) => readClient(fs, p)));
   const library = await Promise.all(libFiles.map((p) => readLibrary(fs, p)));
+  const samples = (await Promise.all(sampleFiles.map((p) => readSample(fs, p).catch(() => null)))).filter(
+    (x): x is WorkSample => x !== null,
+  );
+  const documents = (await Promise.all(docFiles.map((p) => readDocument(fs, p).catch(() => null)))).filter(
+    (x): x is VaultDocument => x !== null,
+  );
   const donors = (await Promise.all(donorFiles.map((p) => readDonor(fs, p)))).sort((a, b) => a.fm.name.localeCompare(b.fm.name));
 
   if (!clients.some((c) => c.slug === ME)) clients.unshift(blankClient(ME, "Me"));
@@ -307,6 +325,8 @@ export async function loadVault(fs: VaultFS): Promise<VaultData> {
     clients,
     donors,
     library: library.sort((a, b) => a.path.localeCompare(b.path)),
+    samples: samples.sort((a, b) => b.fm.year.localeCompare(a.fm.year) || a.fm.title.localeCompare(b.fm.title)),
+    documents: documents.sort((a, b) => a.fm.title.localeCompare(b.fm.title)),
     libraryFolders: [...libFolders].sort(),
     budgetTemplates: budgetTemplates.sort(),
     settings,
@@ -401,6 +421,8 @@ export async function loadSettings(fs: VaultFS): Promise<Settings> {
       ...raw,
       customTheme: { ...DEFAULT_SETTINGS.customTheme, ...(raw.customTheme ?? {}) },
       todoist: { ...DEFAULT_SETTINGS.todoist, ...(raw.todoist ?? {}) },
+      feeds: mergeFeeds(raw.feeds),
+      dataColors: raw.dataColors && typeof raw.dataColors === "object" ? raw.dataColors : {},
     };
   } catch {
     return structuredClone(DEFAULT_SETTINGS);
@@ -413,7 +435,7 @@ export async function saveSettings(fs: VaultFS, s: Settings) {
 
 /** Create the vault skeleton in an empty (or existing) folder. Safe to run repeatedly. */
 export async function initVault(fs: VaultFS) {
-  for (const d of ["grants", "clients", "donors", "library/shared", "library/me", "library/budgets", "funders", ".manyapply"]) {
+  for (const d of ["grants", "clients", "donors", "library/shared", "library/me", "library/budgets", "samples/shared", "samples/me", "documents/me", "funders", ".manyapply"]) {
     await fs.mkdir(d);
   }
   if (!(await fs.exists("clients/me.md"))) await writeClient(fs, blankClient(ME, "Me"));
@@ -452,7 +474,7 @@ export async function saveGrant(fs: VaultFS, g: Grant, opts: { touch?: boolean }
 }
 
 async function renameUsedIn(fs: VaultFS, from: string, to: string) {
-  const entries = await fs.list("library");
+  const entries = [...(await fs.list("library")), ...(await fs.list("samples"))];
   for (const e of entries) {
     if (e.isDir || !e.path.endsWith(".md")) continue;
     const text = await fs.readText(e.path);
