@@ -147,7 +147,7 @@ export function Reports() {
             <Bar
               data={{
                 labels: byType.map((r) => `${r.label} (${r.decided})`),
-                datasets: [{ label: "Win rate", data: byType.map((r) => Math.round(r.rate * 100)), backgroundColor: cssVar("--accent"), borderRadius: 4, maxBarThickness: 36 }],
+                datasets: [{ label: "Win rate", data: byType.map((r) => Math.round(r.rate * 100)), backgroundColor: cssVar("--st-submitted"), borderRadius: 4, maxBarThickness: 36 }],
               }}
               options={{ ...opts, plugins: { legend: { display: false } }, scales: { ...opts.scales, y: pctTicks } }}
             />
@@ -200,7 +200,7 @@ export function Reports() {
                       key={i}
                       className="c"
                       title={`${MONTH_NAMES[i]} ${row.year}: ${n} deadline${n === 1 ? "" : "s"}`}
-                      style={{ background: n ? `color-mix(in srgb, var(--accent) ${15 + (n / heatMax) * 70}%, transparent)` : "var(--hover)" }}
+                      style={{ background: n ? `color-mix(in srgb, var(--st-awarded) ${15 + (n / heatMax) * 70}%, transparent)` : "var(--hover)" }}
                     >
                       {n || ""}
                     </span>

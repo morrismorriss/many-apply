@@ -163,6 +163,8 @@ export function GrantDrawer({ folder }: { folder: string }) {
         </div>
       </section>
 
+      <SubmittedText folder={folder} />
+
       {(f.status === "awarded" || f.reports.length > 0) && <Reports g={g} />}
 
       <Questions g={g} />
@@ -229,6 +231,48 @@ function ExtraField({ k, value, onSave }: { k: string; value: unknown; onSave: (
         )}
       </div>
     </>
+  );
+}
+
+// ------------------------------------------------------------------ Submitted text
+
+/** The full text that was sent, kept in its own file so pasted headings can't disturb grant.md. */
+function SubmittedText({ folder }: { folder: string }) {
+  const fs = useStore((s) => s.fs);
+  const mutate = useStore((s) => s.mutate);
+  const toast = useStore((s) => s.toast);
+  const path = `grants/${folder}/submitted.md`;
+  const [text, setText] = useState<string | null>(null);
+  useEffect(() => {
+    if (!fs) return;
+    let live = true;
+    fs.readText(path).then((t) => live && setText(t.trim())).catch(() => live && setText(""));
+    return () => {
+      live = false;
+    };
+  }, [fs, path]);
+  if (text === null) return null;
+  return (
+    <section>
+      <h3>
+        Submitted application <span className="spacer" />
+        <span className="muted small" style={{ fontWeight: 400 }}>
+          {wordCount(text).toLocaleString("en-US")} words
+        </span>
+      </h3>
+      <InlineText
+        multiline
+        className="inline submitted-text"
+        value={text}
+        placeholder="Paste or write the full text you submitted, so you have a record of it. Saved when you click away."
+        onSave={async (v) => {
+          setText(v);
+          await mutate((f) => f.writeText(path, v ? v + "\n" : ""));
+          toast("Saved submitted text");
+        }}
+      />
+      <span className="muted small">Saved in grants/{folder}/submitted.md</span>
+    </section>
   );
 }
 
