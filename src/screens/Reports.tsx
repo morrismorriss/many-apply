@@ -13,11 +13,12 @@ import {
 } from "../lib/stats";
 import { exportGrantsCsv } from "../lib/csvImport";
 import { saveFile } from "../lib/platform";
-import { cssVar, themeChartOptions } from "../lib/charts";
+import { cssVar, dataColor, themeChartOptions } from "../lib/charts";
 import { fmtMoney, MONTH_NAMES } from "../lib/util";
 
 export function Reports() {
   const all = useStore((s) => s.data!.grants);
+  const dataColors = useStore((s) => s.data!.settings.dataColors);
   const clients = useStore((s) => s.data!.clients);
   const clientFilter = useStore((s) => s.clientFilter);
   const go = useStore((s) => s.go);
@@ -108,8 +109,8 @@ export function Reports() {
               data={{
                 labels: ry.map((r) => String(r.year)),
                 datasets: [
-                  { label: "Requested", data: ry.map((r) => r.requested), backgroundColor: cssVar("--st-planning"), borderRadius: 4, maxBarThickness: 32 },
-                  { label: "Awarded", data: ry.map((r) => r.awarded), backgroundColor: cssVar("--st-awarded"), borderRadius: 4, maxBarThickness: 32 },
+                  { label: "Requested", data: ry.map((r) => r.requested), backgroundColor: dataColor("st-planning", dataColors), borderRadius: 4, maxBarThickness: 32 },
+                  { label: "Awarded", data: ry.map((r) => r.awarded), backgroundColor: dataColor("st-awarded", dataColors), borderRadius: 4, maxBarThickness: 32 },
                 ],
               }}
               options={{ ...opts, scales: { ...opts.scales, y: moneyTicks } }}
@@ -147,7 +148,7 @@ export function Reports() {
             <Bar
               data={{
                 labels: byType.map((r) => `${r.label} (${r.decided})`),
-                datasets: [{ label: "Win rate", data: byType.map((r) => Math.round(r.rate * 100)), backgroundColor: cssVar("--st-submitted"), borderRadius: 4, maxBarThickness: 36 }],
+                datasets: [{ label: "Win rate", data: byType.map((r) => Math.round(r.rate * 100)), backgroundColor: dataColor("st-submitted", dataColors), borderRadius: 4, maxBarThickness: 36 }],
               }}
               options={{ ...opts, plugins: { legend: { display: false } }, scales: { ...opts.scales, y: pctTicks } }}
             />
@@ -159,7 +160,7 @@ export function Reports() {
             <Bar
               data={{
                 labels: byFunderType.map((r) => `${r.label} (${r.decided})`),
-                datasets: [{ label: "Win rate", data: byFunderType.map((r) => Math.round(r.rate * 100)), backgroundColor: cssVar("--st-submitted"), borderRadius: 4, maxBarThickness: 36 }],
+                datasets: [{ label: "Win rate", data: byFunderType.map((r) => Math.round(r.rate * 100)), backgroundColor: dataColor("st-submitted", dataColors), borderRadius: 4, maxBarThickness: 36 }],
               }}
               options={{ ...opts, plugins: { legend: { display: false } }, scales: { ...opts.scales, y: pctTicks } }}
             />
@@ -171,7 +172,7 @@ export function Reports() {
             <Bar
               data={{
                 labels: byFunder.map((r) => r.label),
-                datasets: [{ label: "Awarded", data: byFunder.map((r) => r.amount), backgroundColor: cssVar("--st-awarded"), borderRadius: 4, maxBarThickness: 22 }],
+                datasets: [{ label: "Awarded", data: byFunder.map((r) => r.amount), backgroundColor: dataColor("st-awarded", dataColors), borderRadius: 4, maxBarThickness: 22 }],
               }}
               options={{
                 indexAxis: "y" as const,

@@ -1,3 +1,4 @@
+import { DATA_COLOR_KEYS, DATA_COLOR_LABEL, DATA_PALETTES, dataColor, type DataColorKey } from "../lib/charts";
 import { useEffect, useState } from "react";
 import { useStore } from "../store";
 import { getSecret, isTauri, pickFolder, saveFile, setSecret } from "../lib/platform";
@@ -71,6 +72,8 @@ export function SettingsScreen() {
           </div>
         )}
       </Section>
+
+      <ChartColors />
 
       <TodoistSettings />
 
@@ -283,6 +286,54 @@ function TodoistSettings() {
           <span className="muted">days before a report is due (0 for none)</span>
         </div>
       </div>
+    </Section>
+  );
+}
+
+function ChartColors() {
+  const s = useStore((st) => st.data!.settings);
+  const update = useStore((st) => st.updateSettings);
+  const colors = s.dataColors;
+  const setColors = (next: Record<string, string>) => update((x) => ({ ...x, dataColors: next }));
+  const active = DATA_PALETTES.find(
+    (p) => DATA_COLOR_KEYS.every((k) => (p.colors[k] ?? "") === (colors[k] ?? "")),
+  )?.id;
+  // The colour pickers need a hex value even when the theme's own colour is in use.
+  const shown = (k: DataColorKey) => {
+    const v = dataColor(k, colors);
+    return /^#[0-9a-f]{6}$/i.test(v) ? v : "#888888";
+  };
+  return (
+    <Section title="Chart and status colors">
+      <p className="soft small" style={{ marginTop: 0 }}>
+        The colors for each status and date type, used in charts, the pipeline, the calendar and status labels. They work with any theme.
+      </p>
+      <div className="seg">
+        {DATA_PALETTES.map((p) => (
+          <button key={p.id} className={active === p.id ? "on" : ""} onClick={() => setColors({ ...p.colors } as Record<string, string>)}>
+            {p.name}
+          </button>
+        ))}
+        {!active && <button className="on" disabled>Your own</button>}
+      </div>
+      <div className="color-grid" style={{ marginTop: 12 }}>
+        {DATA_COLOR_KEYS.map((k) => (
+          <label key={k} className="color-swatch">
+            <input
+              type="color"
+              value={shown(k)}
+              onChange={(e) => setColors({ ...colors, [k]: e.target.value })}
+              aria-label={`${DATA_COLOR_LABEL[k]} color`}
+            />
+            <span className="small">{DATA_COLOR_LABEL[k]}</span>
+          </label>
+        ))}
+      </div>
+      {Object.keys(colors).length > 0 && (
+        <button className="btn small ghost" style={{ marginTop: 10 }} onClick={() => setColors({})}>
+          Use the theme's colors
+        </button>
+      )}
     </Section>
   );
 }

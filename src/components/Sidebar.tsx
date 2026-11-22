@@ -1,5 +1,8 @@
 import { useStore, useGrants, type ScreenId } from "../store";
+import { useEffect } from "react";
 import { TimerChip } from "./ui";
+import { useNewFeedCount } from "./FeedsPanel";
+import { useFeeds } from "../lib/feedStore";
 
 const NAV: { id: ScreenId; label: string; icon: string }[] = [
   { id: "dashboard", label: "Dashboard", icon: "◧" },
@@ -7,6 +10,7 @@ const NAV: { id: ScreenId; label: string; icon: string }[] = [
   { id: "pipeline", label: "Pipeline", icon: "▥" },
   { id: "calendar", label: "Calendar", icon: "▦" },
   { id: "library", label: "Library", icon: "❏" },
+  { id: "documents", label: "Documents", icon: "⚿" },
   { id: "funders", label: "Funders", icon: "⌂" },
   { id: "clients", label: "Clients", icon: "☺" },
   { id: "giving", label: "Individual Giving", icon: "♡" },
@@ -27,6 +31,18 @@ export function Sidebar() {
     research: grants.filter((g) => g.fm.status === "researching").length,
     pipeline: grants.filter((g) => ["planning", "drafting", "submitted"].includes(g.fm.status)).length,
   };
+  const drawer = useStore((s) => s.drawer);
+  const openDrawer = useStore((s) => s.openDrawer);
+  const closeDrawer = useStore((s) => s.closeDrawer);
+  const feeds = useStore((s) => s.data?.settings.feeds);
+  const newFeedItems = useNewFeedCount();
+  const feedsOpen = drawer?.kind === "feeds";
+  // Load feeds once per vault, a few seconds after it opens, so the badge can show new items.
+  useEffect(() => {
+    if (!feeds || useFeeds.getState().loadedAt || useFeeds.getState().loading) return;
+    const t = setTimeout(() => void useFeeds.getState().refresh(feeds), 3000);
+    return () => clearTimeout(t);
+  }, [root, feeds]);
   const current = route.screen === "draft" || route.screen === "budget" ? "pipeline" : route.screen;
 
   return (
@@ -58,6 +74,19 @@ export function Sidebar() {
           {counts[n.id] ? <span className="count">{counts[n.id]}</span> : null}
         </button>
       ))}
+      <div className="sidebar-sep" />
+      <button
+        className={`nav-item${feedsOpen ? " active" : ""}`}
+        aria-expanded={feedsOpen}
+        title="New grants and open calls from RSS feeds"
+        onClick={() => (feedsOpen ? closeDrawer() : openDrawer({ kind: "feeds", id: "all" }))}
+      >
+        <span className="icon" aria-hidden>
+          ◉
+        </span>
+        Opportunity feeds
+        {newFeedItems ? <span className="count new">{newFeedItems}</span> : null}
+      </button>
       <TimerChip />
       <div className="sidebar-foot" title={root}>
         {root}

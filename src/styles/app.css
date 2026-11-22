@@ -416,3 +416,17 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 20px 0; }
 .sample-drop { border-radius: var(--radius); min-height: 220px; }
 .sample-drop.over { outline: 2px dashed var(--accent); outline-offset: 4px; background: var(--accent-soft); }
 .lib-tabs { margin: -8px 0 16px; }
+
+/* Opportunity feeds */
+.sidebar-sep { height: 1px; background: var(--border); margin: 8px 6px; }
+.nav-item .count.new { background: var(--accent); color: #fff; border-radius: 999px; padding: 0 7px; font-size: 11px; line-height: 18px; }
+.feed-item { padding: 10px 12px; }
+.feed-title { font-weight: 550; line-height: 1.35; color: var(--text); text-decoration: none; }
+.feed-title:hover { text-decoration: underline; }
+.feed-summary { margin: 6px 0 0; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-line; }
+.new-pill { background: var(--accent-soft); color: var(--accent); font-size: 11px; padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
+
+/* Chart and status colors in Settings */
+.color-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px 16px; }
+.color-swatch { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.color-swatch input[type="color"] { width: 36px; height: 28px; border: 1px solid var(--border-strong); border-radius: 6px; padding: 2px; background: var(--surface); cursor: pointer; }

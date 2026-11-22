@@ -167,6 +167,22 @@ export async function setSecret(key: string, value: string | null): Promise<void
   }
 }
 
+/** Read an RSS/Atom feed. In the desktop app this goes through Rust (GET only, size-capped). */
+export async function fetchFeedText(url: string): Promise<string> {
+  if (isTauri) {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<string>("fetch_feed", { url });
+  }
+  try {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`The feed answered ${r.status}`);
+    return await r.text();
+  } catch (e) {
+    // Most feeds block browser pages from reading them (CORS). The desktop app doesn't have that limit.
+    throw new Error(`Couldn't read it in the browser preview (${errorText(e)}). Feeds load in the desktop app.`);
+  }
+}
+
 /** fetch() that goes through the Tauri HTTP plugin in the desktop app (no CORS limits). */
 export async function httpFetch(url: string, init?: RequestInit): Promise<Response> {
   if (isTauri) {

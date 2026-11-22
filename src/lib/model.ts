@@ -1,4 +1,5 @@
 // Core types and constants for the Many Apply vault format.
+import { DEFAULT_FEEDS, type FeedSource } from "./feeds";
 
 export const STATUSES = [
   "researching",
@@ -210,6 +211,10 @@ export interface Settings {
   importPresets: ImportPreset[];
   keepIcsUpdated: boolean;
   pairingCode: string;
+  /** Opportunity feeds (RSS/Atom) shown in the sidebar panel. */
+  feeds: FeedSource[];
+  /** Chart and status colours that override the theme's, keyed like "st-awarded" or "ev-report". */
+  dataColors: Record<string, string>;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -230,6 +235,8 @@ export const DEFAULT_SETTINGS: Settings = {
   importPresets: [],
   keepIcsUpdated: true,
   pairingCode: "",
+  feeds: DEFAULT_FEEDS.map((f) => ({ ...f })),
+  dataColors: {},
 };
 
 export const ME = "me";

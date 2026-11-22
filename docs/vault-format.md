@@ -99,11 +99,29 @@ A sentence or two about the work, as you'd write it on an application.
 
 The top-level folder is `shared` or a client's slug, like the Library: one client's samples are never offered for another client's application. Adding a sample to an application records it in the grant's `work_samples` and the sample's `used_in`.
 
+## documents/&lt;client&gt;/&lt;name&gt;.md
+
+One file per document (W-9, 501(c)(3) letter, contract, insurance certificate…), with the file it describes next to it.
+
+```yaml
+---
+title: Certificate of insurance
+type: Insurance certificate
+file: certificate-of-insurance.pdf
+issued: 2026-01-15
+expires: 2027-01-15     # optional; the Dashboard warns 30 days before
+tags: []
+---
+Notes. Avoid typing full ID or account numbers here.
+```
+
+These files are sensitive. If the vault is in Dropbox, iCloud, Google Drive or OneDrive, anyone that folder is shared with can open them. "Share client folder" never includes `documents/`; a full backup does.
+
 ## .manyapply/
 
 | Path | What it is |
 | --- | --- |
-| `settings.json` | Theme, budget categories, Todoist options (not the token), saved import mappings, extension pairing code. |
+| `settings.json` | Theme, chart and status colors (`dataColors`), opportunity feeds (`feeds`), budget categories, Todoist options (not the token), saved import mappings, extension pairing code. |
 | `calendar.ics` | A live calendar of every date, if turned on in Settings. |
 | `imports/*.json` | One log per import, used for undo. |
 | `trash/` | Deleted grants, library items and undone imports. Nothing is hard-deleted. |

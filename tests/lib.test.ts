@@ -283,3 +283,83 @@ describe("adding a file to a link-only sample", () => {
     expect((await fs.list(".manyapply/trash")).some((e) => e.path.endsWith("made-men-podcast.mp3"))).toBe(true);
   });
 });
+
+describe("documents", () => {
+  it("guesses the type, tracks expiry and loads from the vault", async () => {
+    const { createDocument, expiryState, guessDocType } = await import("../src/lib/documents");
+    expect(guessDocType("W9 2026 signed.pdf")).toBe("W-9");
+    expect(guessDocType("COI Lakeside.pdf")).toBe("Insurance certificate");
+    expect(guessDocType("IRS determination letter.pdf")).toBe("501(c)(3) letter");
+    const fs = new MemoryFS(sampleVault().files, false);
+    const d = await createDocument(fs, "me", { title: "W9 2026", file: { name: "W9 2026.pdf", copyTo: (p) => fs.writeBytes(p, new Uint8Array([1])) } });
+    expect(d.fm.type).toBe("W-9");
+    expect(await fs.exists("documents/me/w9-2026.pdf")).toBe(true);
+    const data = await loadVault(fs);
+    expect(data.documents.some((x) => x.path === "me/w9-2026.md")).toBe(true);
+    const states = Object.fromEntries(data.documents.map((x) => [x.path, expiryState(x)]));
+    expect(states["me/w-9.md"]).toBe("soon");
+    expect(states["lakeside-youth-theater/certificate-of-insurance.md"]).toBe("expired");
+    expect(states["me/fiscal-sponsor-agreement.md"]).toBe("none");
+  });
+
+  it("is never included in Share client folder", async () => {
+    const { zipClient } = await import("../src/lib/backup");
+    const fs = new MemoryFS(sampleVault().files, false);
+    const zip = await JSZip.loadAsync(await zipClient(fs, "lakeside-youth-theater", []));
+    expect(Object.keys(zip.files).some((p) => p.startsWith("documents/"))).toBe(false);
+  });
+});
+
+describe("feeds", () => {
+  it("parses RSS with CDATA, entities and categories", async () => {
+    const { parseFeed, matchesFilter, itemToGrant } = await import("../src/lib/feeds");
+    const xml = `<?xml version="1.0"?><rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>NYC Playwrights</title>
+      <item><title>Call for Plays &amp; Monologues</title><link>https://example.org/a</link><guid isPermaLink="false">tag:1</guid>
+      <pubDate>Mon, 02 Nov 2026 10:00:00 +0000</pubDate><category>Theater</category>
+      <description><![CDATA[<p>Deadline: December 15, 2026. Prize of $1,000.</p><p>No fee.</p>]]></description></item>
+      <item><title>Broadband</title><link>https://example.org/b</link><category><![CDATA[Infrastructure]]></category></item>
+    </channel></rss>`;
+    const { title, items } = parseFeed(xml, "x");
+    expect(title).toBe("NYC Playwrights");
+    expect(items).toHaveLength(2);
+    expect(items[0]).toMatchObject({ id: "tag:1", title: "Call for Plays & Monologues", link: "https://example.org/a", categories: ["Theater"] });
+    expect(items[0].date).toBe("2026-11-02T10:00:00.000Z");
+    expect(items[0].summary).toBe("Deadline: December 15, 2026. Prize of $1,000.\nNo fee.");
+    expect(matchesFilter(items[0], "arts, theater")).toBe(true);
+    expect(matchesFilter(items[1], "arts, theater")).toBe(false);
+    expect(matchesFilter(items[1], "")).toBe(true);
+    // "art" must not match "start"
+    expect(matchesFilter({ ...items[1], title: "Start-up grants" }, "art")).toBe(false);
+    const g = itemToGrant(items[0], "NYC Playwrights");
+    expect(g.url).toBe("https://example.org/a");
+    expect(g.max_award).toBe(1000);
+    expect(g.eligibility).toContain("From NYC Playwrights.");
+  });
+
+  it("parses Atom and keeps the alternate link", async () => {
+    const { parseFeed } = await import("../src/lib/feeds");
+    const xml = `<feed xmlns="http://www.w3.org/2005/Atom"><title type="text">Blog</title>
+      <entry><id>urn:1</id><title type="html">Residency &lt;b&gt;open&lt;/b&gt;</title>
+      <link rel="replies" href="https://example.org/1#comments"/><link rel="alternate" type="text/html" href="https://example.org/1"/>
+      <published>2026-10-01T00:00:00Z</published><summary>Four weeks.</summary></entry></feed>`;
+    const { items } = parseFeed(xml, "b");
+    expect(items[0]).toMatchObject({ id: "urn:1", title: "Residency open", link: "https://example.org/1", summary: "Four weeks." });
+    expect(parseFeed("<html>not a feed</html>", "z").items).toEqual([]);
+  });
+
+  it("gives old settings the default feeds and keeps the user's choices", async () => {
+    const { mergeFeeds, DEFAULT_FEEDS } = await import("../src/lib/feeds");
+    expect(mergeFeeds(undefined).map((f) => f.id)).toEqual(DEFAULT_FEEDS.map((f) => f.id));
+    const mine = mergeFeeds([{ id: "artdeadline", name: "AD", url: "https://x/feed", enabled: false, match: "" }, { id: "own", name: "Mine", url: "https://y/rss", enabled: true, match: "" }]);
+    expect(mine.find((f) => f.id === "artdeadline")?.enabled).toBe(false);
+    expect(mine.map((f) => f.id)).toEqual(["artdeadline", "own", "grants-gov", "nycplaywrights"]);
+  });
+});
+
+describe("displayText", () => {
+  it("stops the app font drawing (c) as ©, without changing visible text", async () => {
+    const { displayText } = await import("../src/lib/util");
+    expect(displayText("501(c)(3) letter")).toBe("501(‌c)(3) letter");
+    expect(displayText("501(c)(3) letter").replace(/‌/g, "")).toBe("501(c)(3) letter");
+  });
+});

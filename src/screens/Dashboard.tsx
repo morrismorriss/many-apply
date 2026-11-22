@@ -3,10 +3,11 @@ import { Bar } from "react-chartjs-2";
 import { useGrants, useLookups, useStore } from "../store";
 import { dashboardNumbers, needsAttention, statusCounts, type Attention } from "../lib/stats";
 import { STATUSES, STATUS_LABEL } from "../lib/model";
-import { addDays, daysBetween, fmtDate, fmtMoney, fromISO, MONTH_NAMES, toISO } from "../lib/util";
-import { cssVar, themeChartOptions } from "../lib/charts";
+import { addDays, daysBetween, daysUntil, displayText, fmtDate, fmtMoney, fromISO, MONTH_NAMES, relDays, toISO } from "../lib/util";
+import { cssVar, dataColor, themeChartOptions } from "../lib/charts";
 import { ClientLabel, Empty, statusColor } from "../components/ui";
 import { QuickAdd } from "../components/QuickAdd";
+import { documentOwner, expiryState } from "../lib/documents";
 
 const ATT_ICON: Record<Attention["kind"], [string, string]> = {
   due: ["!", "var(--danger)"],
@@ -24,6 +25,9 @@ export function Dashboard() {
   const [adding, setAdding] = useState(false);
   const n = dashboardNumbers(grants);
   const att = needsAttention(grants);
+  const clientFilter = useStore((s) => s.clientFilter);
+  const allDocs = useStore((s) => s.data!.documents);
+  const docAtt = allDocs.filter((d) => (!clientFilter || documentOwner(d) === clientFilter) && ["expired", "soon"].includes(expiryState(d)));
   const counts = statusCounts(grants);
   const today = new Date();
   const hour = today.getHours();
@@ -78,10 +82,25 @@ export function Dashboard() {
           <div className="grid cols-2">
             <div className="panel">
               <h2>Needs attention</h2>
-              {att.length === 0 ? (
+              {att.length === 0 && docAtt.length === 0 ? (
                 <p className="muted">All caught up.</p>
               ) : (
                 <div>
+                  {docAtt.map((d) => {
+                    const n = daysUntil(d.fm.expires);
+                    return (
+                      <div key={d.path} className="att" onClick={() => open({ kind: "document", id: d.path })}>
+                        <span className="ic" style={{ ["--c" as string]: "var(--warn)" }}>⚿</span>
+                        <div className="grow" style={{ minWidth: 0 }}>
+                          <div className="ellipsis" style={{ fontWeight: 550 }}>
+                            {d.fm.title} <ClientLabel slug={documentOwner(d)} hideMe />
+                          </div>
+                          <div className="small soft">{n !== null && n < 0 ? `Expired ${relDays(n)}` : `Expires ${relDays(n)}`}. Get a new one.</div>
+                        </div>
+                        <span className="small muted ellipsis" style={{ maxWidth: 140 }}>{displayText(d.fm.type)}</span>
+                      </div>
+                    );
+                  })}
                   {att.slice(0, 12).map((a, i) => (
                     <div key={i} className="att" onClick={() => open({ kind: "grant", id: a.grant.folder })}>
                       <span className="ic" style={{ ["--c" as string]: ATT_ICON[a.kind][1] }}>
@@ -110,7 +129,7 @@ export function Dashboard() {
                     datasets: [
                       {
                         data: STATUSES.map((s) => counts[s]),
-                        backgroundColor: STATUSES.map((s) => cssVar(`--st-${s}`)),
+                        backgroundColor: STATUSES.map((s) => dataColor(`st-${s}`, settings.dataColors)),
                         borderRadius: 4,
                         maxBarThickness: 36,
                       },

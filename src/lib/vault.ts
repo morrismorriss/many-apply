@@ -20,6 +20,8 @@ import {
 import { asArray, parseNumber, slugify, str, todayISO, wordCount } from "./util";
 import { readDonor, type Donor } from "./donors";
 import { readSample, type WorkSample } from "./samples";
+import { readDocument, type VaultDocument } from "./documents";
+import { mergeFeeds } from "./feeds";
 
 export const GRANT_ORDER = [
   "title", "client", "funder", "url", "type", "status", "starred", "amount_requested", "amount_awarded",
@@ -40,6 +42,7 @@ export interface VaultData {
   donors: Donor[];
   library: LibraryItem[];
   samples: WorkSample[];
+  documents: VaultDocument[];
   libraryFolders: string[]; // relative to library/, excluding budgets
   budgetTemplates: string[]; // file names in library/budgets
   settings: Settings;
@@ -249,6 +252,7 @@ export async function loadVault(fs: VaultFS): Promise<VaultData> {
   const donorFiles: string[] = [];
   const libFiles: string[] = [];
   const sampleFiles: string[] = [];
+  const docFiles: string[] = [];
 
   for (const e of entries) {
     const parts = e.path.split("/");
@@ -265,6 +269,8 @@ export async function loadVault(fs: VaultFS): Promise<VaultData> {
       donorFiles.push(e.path);
     } else if (parts[0] === "samples" && parts.length >= 3 && !e.isDir && e.path.endsWith(".md")) {
       sampleFiles.push(e.path);
+    } else if (parts[0] === "documents" && parts.length >= 3 && !e.isDir && e.path.endsWith(".md")) {
+      docFiles.push(e.path);
     } else if (parts[0] === "library" && parts.length >= 2) {
       const rel = parts.slice(1).join("/");
       if (parts[1] === "budgets") {
@@ -301,6 +307,9 @@ export async function loadVault(fs: VaultFS): Promise<VaultData> {
   const samples = (await Promise.all(sampleFiles.map((p) => readSample(fs, p).catch(() => null)))).filter(
     (x): x is WorkSample => x !== null,
   );
+  const documents = (await Promise.all(docFiles.map((p) => readDocument(fs, p).catch(() => null)))).filter(
+    (x): x is VaultDocument => x !== null,
+  );
   const donors = (await Promise.all(donorFiles.map((p) => readDonor(fs, p)))).sort((a, b) => a.fm.name.localeCompare(b.fm.name));
 
   if (!clients.some((c) => c.slug === ME)) clients.unshift(blankClient(ME, "Me"));
@@ -317,6 +326,7 @@ export async function loadVault(fs: VaultFS): Promise<VaultData> {
     donors,
     library: library.sort((a, b) => a.path.localeCompare(b.path)),
     samples: samples.sort((a, b) => b.fm.year.localeCompare(a.fm.year) || a.fm.title.localeCompare(b.fm.title)),
+    documents: documents.sort((a, b) => a.fm.title.localeCompare(b.fm.title)),
     libraryFolders: [...libFolders].sort(),
     budgetTemplates: budgetTemplates.sort(),
     settings,
@@ -411,6 +421,8 @@ export async function loadSettings(fs: VaultFS): Promise<Settings> {
       ...raw,
       customTheme: { ...DEFAULT_SETTINGS.customTheme, ...(raw.customTheme ?? {}) },
       todoist: { ...DEFAULT_SETTINGS.todoist, ...(raw.todoist ?? {}) },
+      feeds: mergeFeeds(raw.feeds),
+      dataColors: raw.dataColors && typeof raw.dataColors === "object" ? raw.dataColors : {},
     };
   } catch {
     return structuredClone(DEFAULT_SETTINGS);
@@ -423,7 +435,7 @@ export async function saveSettings(fs: VaultFS, s: Settings) {
 
 /** Create the vault skeleton in an empty (or existing) folder. Safe to run repeatedly. */
 export async function initVault(fs: VaultFS) {
-  for (const d of ["grants", "clients", "donors", "library/shared", "library/me", "library/budgets", "samples/shared", "samples/me", "funders", ".manyapply"]) {
+  for (const d of ["grants", "clients", "donors", "library/shared", "library/me", "library/budgets", "samples/shared", "samples/me", "documents/me", "funders", ".manyapply"]) {
     await fs.mkdir(d);
   }
   if (!(await fs.exists("clients/me.md"))) await writeClient(fs, blankClient(ME, "Me"));

@@ -25,9 +25,10 @@ import { calendarEvents, toICS } from "./lib/stats";
 import { debounce, fmtMinutes, todayISO } from "./lib/util";
 import { createDonor, writeDonor, type Donor } from "./lib/donors";
 import { writeSample, type WorkSample } from "./lib/samples";
+import { writeDocument, type VaultDocument } from "./lib/documents";
 
 export type ScreenId =
-  | "dashboard" | "research" | "pipeline" | "calendar" | "library" | "funders" | "clients" | "giving" | "reports" | "import" | "settings";
+  | "dashboard" | "research" | "pipeline" | "calendar" | "library" | "documents" | "funders" | "clients" | "giving" | "reports" | "import" | "settings";
 
 export type Route =
   | { screen: ScreenId }
@@ -40,7 +41,9 @@ export type DrawerTarget =
   | { kind: "client"; id: string }
   | { kind: "donor"; id: string }
   | { kind: "library"; id: string }
-  | { kind: "sample"; id: string };
+  | { kind: "sample"; id: string }
+  | { kind: "document"; id: string }
+  | { kind: "feeds"; id: string };
 
 interface Toast {
   id: number;
@@ -108,6 +111,7 @@ interface State {
   deleteDonor(slug: string): Promise<void>;
   saveLibrary(item: LibraryItem): Promise<void>;
   saveSample(s: WorkSample): Promise<void>;
+  saveDocument(d: VaultDocument): Promise<void>;
   updateSettings(fn: (s: Settings) => Settings): Promise<void>;
   /** Run a function that writes files directly, then reload. */
   mutate<T>(fn: (fs: VaultFS) => Promise<T>): Promise<T>;
@@ -445,6 +449,12 @@ export const useStore = create<State>((set, get) => {
       await writeSample(get().fs!, sample);
       const d = get().data!;
       set({ data: { ...d, samples: d.samples.map((x) => (x.path === sample.path ? sample : x)) } });
+    },
+    async saveDocument(doc) {
+      markWrite();
+      await writeDocument(get().fs!, doc);
+      const d = get().data!;
+      set({ data: { ...d, documents: d.documents.map((x) => (x.path === doc.path ? doc : x)) } });
     },
     async updateSettings(fn) {
       const d = get().data!;

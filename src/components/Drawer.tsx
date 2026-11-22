@@ -5,6 +5,8 @@ import { ClientDrawer } from "./ClientDrawer";
 import { LibraryDrawer } from "./LibraryDrawer";
 import { DonorDrawer } from "./DonorDrawer";
 import { SampleDrawer } from "./SampleDrawer";
+import { DocumentDrawer } from "./DocumentDrawer";
+import { FeedsPanel } from "./FeedsPanel";
 
 const LABEL: Record<DrawerTarget["kind"], string> = {
   grant: "Application",
@@ -13,6 +15,8 @@ const LABEL: Record<DrawerTarget["kind"], string> = {
   donor: "Donor",
   library: "Library",
   sample: "Work sample",
+  document: "Document",
+  feeds: "Opportunity feeds",
 };
 
 export function Drawer({ target }: { target: DrawerTarget }) {
@@ -24,7 +28,8 @@ export function Drawer({ target }: { target: DrawerTarget }) {
     <aside className={`drawer${pinned ? " pinned" : ""}${expanded ? " expanded" : ""}`} aria-label={LABEL[target.kind]}>
       <div className="drawer-bar">
         <span className="crumb">
-          {LABEL[target.kind]} · {target.id}
+          {LABEL[target.kind]}
+          {target.kind !== "feeds" && ` · ${target.id}`}
         </span>
         <button className={`icon-btn${pinned ? " on" : ""}`} title={pinned ? "Unpin" : "Pin open"} onClick={() => setDrawer({ pinned: !pinned })}>
           ⚲
@@ -43,6 +48,8 @@ export function Drawer({ target }: { target: DrawerTarget }) {
         {target.kind === "donor" && <DonorDrawer key={target.id} slug={target.id} />}
         {target.kind === "library" && <LibraryDrawer key={target.id} path={target.id} />}
         {target.kind === "sample" && <SampleDrawer key={target.id} path={target.id} />}
+        {target.kind === "document" && <DocumentDrawer key={target.id} path={target.id} />}
+        {target.kind === "feeds" && <FeedsPanel />}
       </div>
     </aside>
   );

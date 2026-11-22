@@ -207,6 +207,14 @@ export function sampleVault(today = new Date()): { files: Record<string, string>
     title: "Summer intensive production photos", kind: "image", url: "https://example.org/lakeside/photos", year: "2026",
     medium: "Production photography", credits: "Photos: J. Ortiz", tags: ["photos", "youth"],
   });
+  // Documents. Demo ones have no files attached.
+  const doc = (path: string, fm: Record<string, unknown>, body = "") => {
+    files[`documents/${path}`] = stringifyFrontmatter({ file: "", tags: [], ...fm }, body);
+  };
+  doc("me/w-9.md", { title: "W-9", type: "W-9", issued: d(-340), expires: d(25) }, "Many funders want a W-9 signed this calendar year.\n");
+  doc("me/fiscal-sponsor-agreement.md", { title: "Fractured Atlas fiscal sponsorship", type: "Fiscal sponsor agreement", issued: d(-500) });
+  doc("lakeside-youth-theater/irs-determination-letter.md", { title: "IRS determination letter", type: "501(c)(3) letter", issued: "2015-03-02" });
+  doc("lakeside-youth-theater/certificate-of-insurance.md", { title: "Certificate of insurance", type: "Insurance certificate", issued: d(-370), expires: d(-5) });
   files["library/budgets/staged-reading.csv"] =
     "category,type,line_item,quantity,rate,amount,notes\nArtist fees,Expense,Playwright fee,,,,\nArtist fees,Expense,Actor stipends,4,,,\nSpace,Expense,Rehearsal space,3,,,\nDocumentation,Expense,Video of reading,,,,\n";
 
