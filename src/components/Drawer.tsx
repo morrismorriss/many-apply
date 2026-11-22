@@ -4,6 +4,7 @@ import { FunderDrawer } from "./FunderDrawer";
 import { ClientDrawer } from "./ClientDrawer";
 import { LibraryDrawer } from "./LibraryDrawer";
 import { DonorDrawer } from "./DonorDrawer";
+import { SampleDrawer } from "./SampleDrawer";
 
 const LABEL: Record<DrawerTarget["kind"], string> = {
   grant: "Application",
@@ -11,6 +12,7 @@ const LABEL: Record<DrawerTarget["kind"], string> = {
   client: "Client",
   donor: "Donor",
   library: "Library",
+  sample: "Work sample",
 };
 
 export function Drawer({ target }: { target: DrawerTarget }) {
@@ -40,6 +42,7 @@ export function Drawer({ target }: { target: DrawerTarget }) {
         {target.kind === "client" && <ClientDrawer key={target.id} slug={target.id} />}
         {target.kind === "donor" && <DonorDrawer key={target.id} slug={target.id} />}
         {target.kind === "library" && <LibraryDrawer key={target.id} path={target.id} />}
+        {target.kind === "sample" && <SampleDrawer key={target.id} path={target.id} />}
       </div>
     </aside>
   );

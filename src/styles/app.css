@@ -395,3 +395,24 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 20px 0; }
   .grid.cols-2, .grid.cols-3, .import { grid-template-columns: 1fr; }
   .main.with-drawer { margin-right: 0; }
 }
+
+/* Work samples */
+.sample-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+.sample-card { display: flex; flex-direction: column; text-align: left; padding: 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); cursor: pointer; overflow: hidden; font: inherit; }
+.sample-card:hover { box-shadow: var(--shadow); border-color: var(--border-strong); }
+.sample-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sample-card .sample-body { padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sample-card .title { font-weight: 550; }
+.sample-thumb { display: flex; align-items: center; justify-content: center; background: var(--hover); border-radius: var(--radius-sm); overflow: hidden; width: 100%; }
+.sample-card .sample-thumb { border-radius: 0; }
+.sample-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sample-icon { font-size: 26px; color: var(--muted); line-height: 1; }
+.sample-preview { border: 1px solid var(--border); border-radius: var(--radius); background: var(--hover); overflow: hidden; display: flex; align-items: center; justify-content: center; }
+.sample-preview img, .sample-preview video { display: block; max-width: 100%; max-height: 420px; }
+.sample-preview video { width: 100%; background: #000; }
+.sample-preview.audio { flex-direction: column; gap: 10px; padding: 20px 14px; }
+.sample-preview.audio audio { width: 100%; }
+.sample-preview.empty { flex-direction: column; gap: 8px; padding: 28px 14px; text-align: center; }
+.sample-drop { border-radius: var(--radius); min-height: 220px; }
+.sample-drop.over { outline: 2px dashed var(--accent); outline-offset: 4px; background: var(--accent-soft); }
+.lib-tabs { margin: -8px 0 16px; }

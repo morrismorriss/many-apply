@@ -24,6 +24,7 @@ import * as todoist from "./lib/todoist";
 import { calendarEvents, toICS } from "./lib/stats";
 import { debounce, fmtMinutes, todayISO } from "./lib/util";
 import { createDonor, writeDonor, type Donor } from "./lib/donors";
+import { writeSample, type WorkSample } from "./lib/samples";
 
 export type ScreenId =
   | "dashboard" | "research" | "pipeline" | "calendar" | "library" | "funders" | "clients" | "giving" | "reports" | "import" | "settings";
@@ -38,7 +39,8 @@ export type DrawerTarget =
   | { kind: "funder"; id: string }
   | { kind: "client"; id: string }
   | { kind: "donor"; id: string }
-  | { kind: "library"; id: string };
+  | { kind: "library"; id: string }
+  | { kind: "sample"; id: string };
 
 interface Toast {
   id: number;
@@ -105,6 +107,7 @@ interface State {
   addDonor(name: string): Promise<string>;
   deleteDonor(slug: string): Promise<void>;
   saveLibrary(item: LibraryItem): Promise<void>;
+  saveSample(s: WorkSample): Promise<void>;
   updateSettings(fn: (s: Settings) => Settings): Promise<void>;
   /** Run a function that writes files directly, then reload. */
   mutate<T>(fn: (fs: VaultFS) => Promise<T>): Promise<T>;
@@ -436,6 +439,12 @@ export const useStore = create<State>((set, get) => {
       await writeLibrary(get().fs!, item);
       const d = get().data!;
       set({ data: { ...d, library: d.library.map((x) => (x.path === item.path ? item : x)) } });
+    },
+    async saveSample(sample) {
+      markWrite();
+      await writeSample(get().fs!, sample);
+      const d = get().data!;
+      set({ data: { ...d, samples: d.samples.map((x) => (x.path === sample.path ? sample : x)) } });
     },
     async updateSettings(fn) {
       const d = get().data!;

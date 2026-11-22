@@ -6,6 +6,17 @@ export class TauriFS implements VaultFS {
   readonly kind = "tauri" as const;
   constructor(readonly root: string) {}
 
+  /** Absolute path on disk for a vault-relative path. */
+  absPath(p: string) {
+    return this.abs(p);
+  }
+
+  /** Copy a file from anywhere on disk (one the user picked) into the vault, without loading it into memory. */
+  async copyIn(fromAbs: string, to: string) {
+    await this.ensureParent(to);
+    await fs.copyFile(fromAbs, this.abs(to));
+  }
+
   private abs(p: string) {
     const sep = this.root.includes("\\") && !this.root.includes("/") ? "\\" : "/";
     const rel = sep === "\\" ? p.replace(/\//g, "\\") : p;

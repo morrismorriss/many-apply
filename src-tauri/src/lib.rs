@@ -3,7 +3,7 @@
 //! The app is local-first: the web front end reads and writes the user's vault folder through the
 //! fs plugin. Rust adds three small things the browser can't do on its own:
 //! - storing the Todoist token in the OS keychain (never in the vault),
-//! - opening links in the default browser,
+//! - opening links in the default browser, and vault files (work samples) in their default app,
 //! - a tiny HTTP listener on 127.0.0.1 so the Chrome extension can hand over grants.
 
 mod bridge;
@@ -47,6 +47,35 @@ fn open_url(app: tauri::AppHandle, url: String) -> Result<(), String> {
     app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
 }
 
+/// File types a work sample can be. Anything else (apps, scripts, installers) is refused, so a file
+/// dropped into the vault by someone else can't be launched from inside Many Apply.
+const OPENABLE: &[&str] = &[
+    "jpg", "jpeg", "png", "gif", "webp", "avif", "heic", "tif", "tiff", "bmp", "svg",
+    "mp4", "mov", "m4v", "webm", "mkv", "avi",
+    "mp3", "wav", "m4a", "aac", "flac", "ogg", "oga", "aif", "aiff",
+    "pdf", "doc", "docx", "pages", "txt", "rtf", "odt", "key", "ppt", "pptx",
+];
+
+#[tauri::command]
+fn open_file(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    use tauri_plugin_fs::FsExt;
+    use tauri_plugin_opener::OpenerExt;
+    let p = std::path::Path::new(&path);
+    let ext = p
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+        .unwrap_or_default();
+    if !OPENABLE.contains(&ext.as_str()) {
+        return Err("Only images, video, audio and documents can be opened".into());
+    }
+    // Only files inside folders the user has given Many Apply access to (the vault).
+    if !app.fs_scope().is_allowed(p) {
+        return Err("That file isn't in your vault".into());
+    }
+    app.opener().open_path(path, None::<&str>).map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -67,6 +96,7 @@ pub fn run() {
             secret_set,
             secret_delete,
             open_url,
+            open_file,
             bridge::bridge_set_code,
             bridge::bridge_status
         ])

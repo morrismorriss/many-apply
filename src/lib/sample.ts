@@ -18,6 +18,7 @@ export function sampleVault(today = new Date()): { files: Record<string, string>
       title: "Project Grant 2027", client: "me", funder: "pittsburgh-foundation", url: "https://example.org/pittsburgh-foundation/project-grant",
       type: "grant", status: "drafting", starred: true, amount_requested: 5000, max_award: 5000, deadline: d(9), deadline_type: "fixed",
       project: "Prodigy", location: "Pittsburgh, PA", tags: ["theater", "individual-artist"], created: d(-40),
+      work_samples: ["me/prodigy-reading-excerpt.md", "me/prodigy-script-pages.md"],
       status_history: hist(["researching", -40], ["planning", -30], ["drafting", -21]),
     },
     `## Eligibility\nIndividual artists living in Allegheny County for at least two years. No students.\n\n## Questions\n### 1. Project description (500 words)\nDraft: drafts/01-project-description.md\n\n### 2. Artist bio (150 words)\nDraft: drafts/02-artist-bio.md\n\n### 3. Community impact (300 words)\nDraft: drafts/03-community-impact.md\n\n## Notes\nProgram officer said work samples matter more than the narrative.\n`,
@@ -184,6 +185,28 @@ export function sampleVault(today = new Date()): { files: Record<string, string>
   lib("lakeside-youth-theater/mission-statement.md", "Mission statement", ["mission"], "Lakeside Youth Theater gives every young person in Erie a stage, a voice and a team.\n");
   lib("lakeside-youth-theater/org-history.md", "Organization history", ["history", "mission"], "Founded in 2014 in a church basement, Lakeside Youth Theater now serves 300 students a year through classes, a summer intensive and two mainstage productions.\n");
   lib("lakeside-youth-theater/dei-statement.md", "DEI statement", ["dei", "diversity", "equity", "inclusion"], "Half of our students receive full scholarships. We cast without regard to race, gender or ability, and our teaching artists reflect the city we serve.\n");
+  // Work samples. Demo samples are links only: the browser preview can't keep media files between reloads.
+  const projectGrant = grantFolderName({ deadline: d(9), funder: "pittsburgh-foundation", title: "Project Grant 2027" });
+  const sample = (path: string, fm: Record<string, unknown>, body = "") => {
+    files[`samples/${path}`] = stringifyFrontmatter({ tags: [], used_in: [], ...fm }, body);
+  };
+  sample("me/prodigy-reading-excerpt.md", {
+    title: "Prodigy, staged reading (excerpt)", kind: "video", url: "https://vimeo.com/", year: "2025",
+    medium: "Video documentation of a staged reading", duration: "4:30", credits: "City Theatre, directed by A. Lee",
+    tags: ["prodigy", "theater"], used_in: [projectGrant],
+  }, "Act one, scene three: the chess final. Shows the play's pace and the two-hander at its center.\n");
+  sample("me/prodigy-script-pages.md", {
+    title: "Prodigy, script pages 1 to 10", kind: "document", url: "https://example.org/prodigy-pages.pdf", year: "2025",
+    medium: "Full-length play", tags: ["prodigy", "script"], used_in: [projectGrant],
+  });
+  sample("me/made-men-podcast.md", {
+    title: "Made Men, audio drama pilot", kind: "audio", url: "https://soundcloud.com/", year: "2024",
+    medium: "Audio drama", duration: "22:10", tags: ["made-men", "audio"],
+  }, "Pilot episode, recorded with WESA.\n");
+  sample("lakeside-youth-theater/summer-intensive-photos.md", {
+    title: "Summer intensive production photos", kind: "image", url: "https://example.org/lakeside/photos", year: "2026",
+    medium: "Production photography", credits: "Photos: J. Ortiz", tags: ["photos", "youth"],
+  });
   files["library/budgets/staged-reading.csv"] =
     "category,type,line_item,quantity,rate,amount,notes\nArtist fees,Expense,Playwright fee,,,,\nArtist fees,Expense,Actor stipends,4,,,\nSpace,Expense,Rehearsal space,3,,,\nDocumentation,Expense,Video of reading,,,,\n";
 

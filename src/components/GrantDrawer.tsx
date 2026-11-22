@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useStore } from "../store";
 import {
+  MenuButton,
   ClientSelect,
   FunderSelect,
   InlineDate,
@@ -19,6 +20,7 @@ import { confirmAction } from "./dialogs";
 import {
   DEADLINE_TYPES,
   GRANT_TYPES,
+  ME,
   STATUSES,
   STATUS_LABEL,
   type Grant,
@@ -30,7 +32,10 @@ import { addQuestionToBody, bodySection, listAttachments, parseQuestions, readDr
 import { budgetTotals, parseBudgetCsv } from "../lib/budget";
 import { suggestFor } from "../lib/library";
 import { fmtDate, fmtMinutes, fmtMoney, slugify, todayISO, wordCount } from "../lib/util";
-import { openExternal } from "../lib/platform";
+import { copyToClipboard, errorText, openExternal, saveFile } from "../lib/platform";
+import { recordSampleUsedIn, removeSampleUsedIn, sampleCaption, samplesForClient, SAMPLE_KIND_LABEL } from "../lib/samples";
+import { buildReviewDocx, reviewFileName } from "../lib/reviewExport";
+import { SampleThumb } from "./samples";
 
 const openExternalSafe = (u: string) => void openExternal(u).catch(() => {});
 
@@ -77,6 +82,7 @@ export function GrantDrawer({ folder }: { folder: string }) {
           </button>
         )}
         <span className="grow" />
+        <ReviewExport g={g} />
         <button className="btn small" onClick={() => go({ screen: "budget", folder })}>
           Budget
         </button>
@@ -172,6 +178,8 @@ export function GrantDrawer({ folder }: { folder: string }) {
       {(f.status === "awarded" || f.reports.length > 0) && <Reports g={g} />}
 
       <Questions g={g} />
+
+      <WorkSamples g={g} />
 
       <BudgetSummary g={g} />
 
@@ -749,10 +757,153 @@ function Attachments({ folder }: { folder: string }) {
         </ul>
       ) : (
         <p className="muted small" style={{ margin: 0 }}>
-          Put work samples and award letters in <code>grants/{folder}/attachments/</code>.
+          Put award letters, contracts and other files for this application in <code>grants/{folder}/attachments/</code>.
         </p>
       )}
     </section>
   );
 }
 
+
+// ------------------------------------------------------------------ Work samples
+
+function WorkSamples({ g }: { g: Grant }) {
+  const samples = useStore((s) => s.data?.samples ?? []);
+  const update = useStore((s) => s.updateGrant);
+  const mutate = useStore((s) => s.mutate);
+  const open = useStore((s) => s.openDrawer);
+  const go = useStore((s) => s.go);
+  const toast = useStore((s) => s.toast);
+  const chosen = g.fm.work_samples;
+  const available = samplesForClient(samples, g.fm.client).filter((s) => !chosen.includes(s.path));
+
+  const setChosen = (next: string[]) => update(g.folder, (x) => ({ ...x, fm: { ...x.fm, work_samples: next } }));
+  const add = async (path: string) => {
+    const s = samples.find((x) => x.path === path);
+    await setChosen([...chosen, path]);
+    if (s) await mutate((fs) => recordSampleUsedIn(fs, s, g.folder));
+  };
+  const remove = async (path: string) => {
+    const s = samples.find((x) => x.path === path);
+    await setChosen(chosen.filter((p) => p !== path));
+    if (s) await mutate((fs) => removeSampleUsedIn(fs, s, g.folder));
+  };
+  const move = (i: number, d: -1 | 1) => {
+    const next = [...chosen];
+    const j = i + d;
+    if (j < 0 || j >= next.length) return;
+    [next[i], next[j]] = [next[j], next[i]];
+    void setChosen(next);
+  };
+
+  return (
+    <section>
+      <h3>
+        Work samples <span className="spacer" />
+        {chosen.length > 0 && (
+          <button
+            className="btn small ghost"
+            title="Copy a numbered list of captions, for the application's work sample list"
+            onClick={async () => {
+              const lines = chosen.map((p, i) => {
+                const s = samples.find((x) => x.path === p);
+                return s ? `${i + 1}. ${[sampleCaption(s), s.body.trim(), s.fm.url].filter(Boolean).join(" ")}` : "";
+              });
+              await copyToClipboard(lines.filter(Boolean).join("\n"));
+              toast("Copied sample list");
+            }}
+          >
+            Copy list
+          </button>
+        )}
+        <MenuButton
+          label="+ Add sample"
+          className="btn small ghost"
+          items={[
+            ...available.map((s) => ({
+              label: (
+                <span>
+                  {s.fm.title} <span className="muted small">{SAMPLE_KIND_LABEL[s.fm.kind]}{s.fm.year ? ` · ${s.fm.year}` : ""}</span>
+                </span>
+              ),
+              run: () => void add(s.path),
+            })),
+            { label: <span className="muted">Open Work samples in the Library…</span>, run: () => go({ screen: "library" }) },
+          ]}
+        />
+      </h3>
+      {chosen.length === 0 ? (
+        <p className="muted small" style={{ margin: 0 }}>
+          No samples chosen yet. Pick from this client's work samples (and Shared) so you know exactly what this funder saw.
+        </p>
+      ) : (
+        <div className="stack" style={{ gap: 6 }}>
+          {chosen.map((p, i) => {
+            const s = samples.find((x) => x.path === p);
+            return (
+              <div key={p} className="panel row" style={{ padding: "6px 10px" }}>
+                <span className="muted num">{i + 1}.</span>
+                {s ? (
+                  <>
+                    <div style={{ width: 44 }}><SampleThumb s={s} size={36} /></div>
+                    <a href="#" className="grow ellipsis" onClick={(e) => { e.preventDefault(); open({ kind: "sample", id: p }); }}>
+                      {sampleCaption(s)}
+                    </a>
+                  </>
+                ) : (
+                  <span className="grow muted small ellipsis" title="This sample was moved or deleted">{p} (missing)</span>
+                )}
+                <button className="icon-btn" title="Move up" disabled={i === 0} onClick={() => move(i, -1)}>↑</button>
+                <button className="icon-btn" title="Move down" disabled={i === chosen.length - 1} onClick={() => move(i, 1)}>↓</button>
+                <button className="icon-btn" title="Remove from this application" onClick={() => void remove(p)}>×</button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ------------------------------------------------------------------ Client review export
+
+function ReviewExport({ g }: { g: Grant }) {
+  const fs = useStore((s) => s.fs);
+  const data = useStore((s) => s.data);
+  const toast = useStore((s) => s.toast);
+  const [busy, setBusy] = useState(false);
+  if (!fs || !data) return null;
+  const run = async () => {
+    setBusy(true);
+    try {
+      const questions = await Promise.all(
+        parseQuestions(g.body).map(async (q) => ({ ...q, text: q.draft ? await readDraft(fs, g.folder, q.draft) : "" })),
+      );
+      let budget: ReturnType<typeof budgetTotals> | null = null;
+      try {
+        budget = budgetTotals(parseBudgetCsv(await fs.readText(`grants/${g.folder}/budget.csv`)));
+      } catch {
+        budget = null;
+      }
+      const bytes = await buildReviewDocx({
+        grant: g,
+        clientName: g.fm.client === ME ? "" : data.clients.find((c) => c.slug === g.fm.client)?.fm.name ?? g.fm.client,
+        funderName: data.funders.find((f) => f.slug === g.fm.funder)?.fm.name ?? g.fm.funder,
+        questions,
+        samples: g.fm.work_samples.map((p) => data.samples.find((s) => s.path === p)).filter((s) => s !== undefined),
+        budget,
+      });
+      const saved = await saveFile(reviewFileName(g), bytes, "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+      if (saved) toast("Saved for review. Send it to your client to comment on or edit with tracked changes.");
+    } catch (e) {
+      toast(`Couldn't export: ${errorText(e)}`, "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <button className="btn small" disabled={busy} title="Every question and draft in one Word document, to send a client for comments" onClick={() => void run()}>
+      {busy ? "Exporting…" : "Export for review"}
+    </button>
+  );
+}

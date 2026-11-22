@@ -28,6 +28,8 @@ decision_on:
 todoist_task_ids: []
 reports:               # added by hand after an award, often from a later email
   - {title: Interim report, due: 2027-09-01, submitted_on:, todoist_task_id:, notes: From award email}
+work_samples:          # in the order they were sent; paths relative to samples/
+  - me/river-suite.md
 created: 2026-11-22
 updated: 2026-11-22
 status_history:
@@ -73,6 +75,29 @@ Frontmatter: `name, website, funder_type, contacts, notes`. `funder_type` is one
 ## library/&lt;folder&gt;/&lt;name&gt;.md
 
 Frontmatter: `title, tags, word_count` (computed on save), `used_in` (a list of grant folders). The top-level folder is either `shared` or a client's slug. The Library never suggests one client's writing for another client's application.
+
+## samples/&lt;folder&gt;/&lt;name&gt;.md
+
+One file per work sample. The media file it describes sits next to it (`river-suite.md` and `river-suite.jpg`). A sample can be a link only, with no file.
+
+```yaml
+---
+title: River Suite
+kind: image          # image | video | audio | document | link (worked out from the file or link if missing)
+file: river-suite.jpg
+url: https://vimeo.com/...
+year: 2025
+medium: Oil on linen
+dimensions: 24 x 36 in.
+duration:            # running time, for video and audio
+credits: "Photo: Jane Doe"
+tags: [painting]
+used_in: [2027-02-pittsburgh-foundation-project-grant]
+---
+A sentence or two about the work, as you'd write it on an application.
+```
+
+The top-level folder is `shared` or a client's slug, like the Library: one client's samples are never offered for another client's application. Adding a sample to an application records it in the grant's `work_samples` and the sample's `used_in`.
 
 ## .manyapply/
 

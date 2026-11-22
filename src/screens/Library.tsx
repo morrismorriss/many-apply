@@ -5,8 +5,33 @@ import { searchLibrary } from "../lib/library";
 import { askText } from "../components/dialogs";
 import { Empty, Tags } from "../components/ui";
 import { slugify } from "../lib/util";
+import { getPref, setPref } from "../lib/platform";
+import { SamplesView } from "./Samples";
+
+type Tab = "answers" | "samples";
 
 export function Library() {
+  const [tab, setTabState] = useState<Tab>(getPref("libraryTab") === "samples" ? "samples" : "answers");
+  const answers = useStore((s) => s.data!.library.length);
+  const samples = useStore((s) => s.data!.samples.length);
+  const setTab = (t: Tab) => {
+    setPref("libraryTab", t);
+    setTabState(t);
+  };
+  const tabs = (
+    <div className="seg" role="tablist" aria-label="Library">
+      <button role="tab" aria-selected={tab === "answers"} className={tab === "answers" ? "on" : ""} onClick={() => setTab("answers")}>
+        Answers <span className="muted num">{answers || ""}</span>
+      </button>
+      <button role="tab" aria-selected={tab === "samples"} className={tab === "samples" ? "on" : ""} onClick={() => setTab("samples")}>
+        Work samples <span className="muted num">{samples || ""}</span>
+      </button>
+    </div>
+  );
+  return tab === "samples" ? <SamplesView tabs={tabs} /> : <Answers tabs={tabs} />;
+}
+
+function Answers({ tabs }: { tabs: React.ReactNode }) {
   const data = useStore((s) => s.data!);
   const clientFilter = useStore((s) => s.clientFilter);
   const mutate = useStore((s) => s.mutate);
@@ -120,6 +145,7 @@ export function Library() {
         <button className="btn" onClick={newFolder}>New folder</button>
         <button className="btn primary" onClick={newItem}>+ New answer</button>
       </div>
+      <div className="lib-tabs">{tabs}</div>
       <div className="lib">
         <div className="tree panel" style={{ padding: 8 }}>
           <div className={`tree-node${folder === "" ? " active" : ""}`} onClick={() => setFolder("")}>

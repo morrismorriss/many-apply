@@ -89,6 +89,8 @@ export interface GrantFM {
   decision_on: string;
   todoist_task_ids: string[];
   reports: ReportDate[];
+  /** Work samples sent with this application, as paths relative to samples/. */
+  work_samples: string[];
   created: string;
   updated: string;
   status_history: StatusEvent[];
