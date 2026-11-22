@@ -5,7 +5,15 @@ export const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in
 export async function pickFolder(): Promise<string | null> {
   if (!isTauri) return null;
   const { open } = await import("@tauri-apps/plugin-dialog");
-  const r = await open({ directory: true, multiple: false, title: "Choose your Many Apply vault folder" });
+  // recursive: true grants access to everything inside the folder (grants/, library/, .manyapply/…),
+  // not just its top level. Without it, creating the vault's subfolders is refused.
+  const r = await open({
+    directory: true,
+    recursive: true,
+    multiple: false,
+    canCreateDirectories: true,
+    title: "Choose your Many Apply vault folder",
+  });
   return typeof r === "string" ? r : null;
 }
 
@@ -60,6 +68,17 @@ export async function openExternal(url: string) {
     await invoke("open_url", { url });
   } else {
     window.open(url, "_blank", "noopener");
+  }
+}
+
+/** Readable text for any thrown value. Tauri commands reject with plain strings, not Error objects. */
+export function errorText(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (typeof e === "string") return e;
+  try {
+    return JSON.stringify(e);
+  } catch {
+    return String(e);
   }
 }
 
