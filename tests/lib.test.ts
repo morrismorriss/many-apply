@@ -461,3 +461,38 @@ describe("moving Library items keeps applications linked", () => {
     expect(await fs.exists("samples/shared/clip.mp4")).toBe(true);
   });
 });
+
+describe("CV builder", () => {
+  it("round-trips the cv file and reads hand-typed lines", async () => {
+    const { parseCv, stringifyCv } = await import("../src/lib/cv");
+    const text = `---\nname: Jamie Rivera\nemail: j@example.org\n---\n\n## Education\n- 2015 | MFA, Carnegie Mellon\n- 2010–2012 BA, Oberlin\n\n## Press\nReview in the Post-Gazette\n`;
+    const cv = parseCv(text, "me", "Me");
+    expect(cv.name).toBe("Jamie Rivera");
+    expect(cv.sections[0].entries).toEqual([{ year: "2015", text: "MFA, Carnegie Mellon" }, { year: "2010–2012", text: "BA, Oberlin" }]);
+    expect(cv.sections[1].entries).toEqual([{ year: "", text: "Review in the Post-Gazette" }]);
+    expect(parseCv(stringifyCv(cv), "me", "Me")).toEqual(cv);
+  });
+
+  it("suggests awarded grants and work samples not yet on the CV, and builds a docx", async () => {
+    const { blankCv, cvSuggestions, applySuggestions, buildCvDocx, cvText } = await import("../src/lib/cv");
+    const fs = new MemoryFS();
+    await fs.writeText("clients/me.md", "---\nname: Me\n---\n");
+    await createGrant(fs, { title: "Project Grant", funder: "pittsburgh-foundation", deadline: "2026-03-01", status: "awarded", amount_awarded: 5000, decision_on: "2026-05-01" } as never);
+    await createGrant(fs, { title: "Hambidge Residency", funder: "hambidge", deadline: "2025-09-01", status: "awarded", type: "residency" } as never);
+    await createGrant(fs, { title: "Lost one", funder: "x", deadline: "2026-01-01", status: "declined" } as never);
+    const { loadVault } = await import("../src/lib/vault");
+    const data = await loadVault(fs);
+    const cv = blankCv("me", "Jamie");
+    cv.sections[0].entries.push({ year: "2024", text: "Project Grant, Pittsburgh Foundation" });
+    const name = (s: string) => (s === "pittsburgh-foundation" ? "Pittsburgh Foundation" : "Hambidge Center");
+    const sugs = cvSuggestions(cv, data.grants, [], name, { amounts: true });
+    expect(sugs).toEqual([{ section: "Residencies and fellowships", entry: { year: "2025", text: "Hambidge Residency, Hambidge Center" } }]);
+    const next = applySuggestions(cv, sugs);
+    expect(cvText(next)).toContain("2025  Hambidge Residency, Hambidge Center");
+    const bytes = await buildCvDocx(next);
+    const JSZip = (await import("jszip")).default;
+    const xml = await (await JSZip.loadAsync(bytes)).file("word/document.xml")!.async("string");
+    expect(xml).toContain("Hambidge Residency");
+    expect(xml).not.toContain("Selected works");
+  });
+});

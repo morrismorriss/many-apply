@@ -24,7 +24,7 @@ export function reviewFileName(g: Grant): string {
 
 // ---------------------------------------------------------------- XML helpers
 
-function esc(s: string): string {
+export function esc(s: string): string {
   return s
     // Characters XML 1.0 doesn't allow at all.
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]/g, "")
@@ -34,14 +34,14 @@ function esc(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-interface RunOpts {
+export interface RunOpts {
   bold?: boolean;
   italic?: boolean;
   color?: string;
   size?: number; // half-points
 }
 
-function run(text: string, o: RunOpts = {}): string {
+export function run(text: string, o: RunOpts = {}): string {
   const props = [
     o.bold ? "<w:b/>" : "",
     o.italic ? "<w:i/>" : "",
@@ -51,7 +51,7 @@ function run(text: string, o: RunOpts = {}): string {
   return `<w:r>${props ? `<w:rPr>${props}</w:rPr>` : ""}<w:t xml:space="preserve">${esc(text)}</w:t></w:r>`;
 }
 
-function para(runs: string, style?: string, extra = ""): string {
+export function para(runs: string, style?: string, extra = ""): string {
   const pPr = style || extra ? `<w:pPr>${style ? `<w:pStyle w:val="${style}"/>` : ""}${extra}</w:pPr>` : "";
   return `<w:p>${pPr}${runs}</w:p>`;
 }
@@ -188,7 +188,7 @@ export function reviewDocumentXml(input: ReviewInput): string {
   );
 }
 
-const STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+export const DOCX_STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
 <w:docDefaults>
 <w:rPrDefault><w:rPr><w:rFonts w:ascii="Georgia" w:hAnsi="Georgia" w:eastAsia="Georgia" w:cs="Georgia"/><w:sz w:val="23"/><w:szCs w:val="23"/><w:lang w:val="en-US"/></w:rPr></w:rPrDefault>
@@ -203,8 +203,13 @@ const STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 </w:styles>`;
 
 export async function buildReviewDocx(input: ReviewInput): Promise<Uint8Array> {
+  return packDocx(input.grant.fm.title, reviewDocumentXml(input), input.today);
+}
+
+/** Wrap a document.xml in the other parts a .docx needs. */
+export async function packDocx(title: string, documentXml: string, today = new Date()): Promise<Uint8Array> {
   const zip = new JSZip();
-  const now = (input.today ?? new Date()).toISOString().replace(/\.\d+Z$/, "Z");
+  const now = today.toISOString().replace(/\.\d+Z$/, "Z");
   zip.file(
     "[Content_Types].xml",
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -235,12 +240,12 @@ export async function buildReviewDocx(input: ReviewInput): Promise<Uint8Array> {
     "docProps/core.xml",
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-<dc:title>${esc(input.grant.fm.title)}</dc:title>
+<dc:title>${esc(title)}</dc:title>
 <dc:creator>Many Apply</dc:creator>
 <dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created>
 </cp:coreProperties>`,
   );
-  zip.file("word/styles.xml", STYLES);
-  zip.file("word/document.xml", reviewDocumentXml(input));
+  zip.file("word/styles.xml", DOCX_STYLES);
+  zip.file("word/document.xml", documentXml);
   return zip.generateAsync({ type: "uint8array", compression: "DEFLATE" });
 }

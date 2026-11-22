@@ -10,6 +10,7 @@ const NAV: { id: ScreenId; label: string; icon: string }[] = [
   { id: "pipeline", label: "Pipeline", icon: "▥" },
   { id: "calendar", label: "Calendar", icon: "▦" },
   { id: "library", label: "Library", icon: "❏" },
+  { id: "cv", label: "CV", icon: "✎" },
   { id: "documents", label: "Documents", icon: "⚿" },
   { id: "funders", label: "Funders", icon: "⌂" },
   { id: "clients", label: "Clients", icon: "☺" },
