@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <filter id="s" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="1" stdDeviation="1.2" flood-color="#3a2a2a" flood-opacity="0.22"/>
+    </filter>
+  </defs>
+  <!-- back: pink sheet, furthest left -->
+  <g transform="rotate(-18 24 38)" filter="url(#s)">
+    <rect x="7" y="15" width="33" height="42" rx="4" fill="#f2a5bf"/>
+    <path d="M7 23.5h33M7 31.5h33M7 39.5h33M7 47.5h33M18 15v42M29 15v42" stroke="#e483a5" stroke-width="1.3"/>
+  </g>
+  <!-- middle: blue sheet, a little left -->
+  <g transform="rotate(-8 32 36)" filter="url(#s)">
+    <rect x="14" y="13" width="33" height="42" rx="4" fill="#8db7ea"/>
+    <path d="M14 21.5h33M14 29.5h33M14 37.5h33M14 45.5h33M25 13v42M36 13v42" stroke="#6c9bd8" stroke-width="1.3"/>
+  </g>
+  <!-- front: white sheet -->
+  <g filter="url(#s)">
+    <rect x="22.5" y="11.5" width="35" height="44" rx="4" fill="#ffffff" stroke="#d8d1c9" stroke-width="1"/>
+    <path d="M22.5 15.5a4 4 0 0 1 4-4h27a4 4 0 0 1 4 4v4.5h-35z" fill="#efe9e3"/>
+    <path d="M22.5 20h35M22.5 27.5h35M22.5 35h35M22.5 42.5h35M22.5 50h35M34 11.5v44M45.5 11.5v44" stroke="#d8d1c9" stroke-width="1.1"/>
+  </g>
+</svg>

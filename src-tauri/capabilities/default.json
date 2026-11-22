@@ -1,0 +1,33 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Many Apply: read and write the user's chosen vault folder, native dialogs, and HTTPS to Todoist only.",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "dialog:default",
+    "fs:default",
+    "fs:allow-read-text-file",
+    "fs:allow-read-file",
+    "fs:allow-write-text-file",
+    "fs:allow-write-file",
+    "fs:allow-read-dir",
+    "fs:allow-mkdir",
+    "fs:allow-remove",
+    "fs:allow-rename",
+    "fs:allow-exists",
+    "fs:allow-stat",
+    "fs:allow-watch",
+    "fs:allow-unwatch",
+    {
+      "identifier": "http:default",
+      "allow": [
+        {
+          "url": "https://api.todoist.com/*"
+        }
+      ]
+    }
+  ]
+}
