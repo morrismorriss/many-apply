@@ -9,7 +9,7 @@ import {
 } from "chart.js";
 
 Chart.register(BarElement, CategoryScale, LinearScale, ArcElement, Tooltip, Legend);
-Chart.defaults.font.family = '"Inter", -apple-system, sans-serif';
+Chart.defaults.font.family = '"Hauora Sans", -apple-system, sans-serif';
 Chart.defaults.font.size = 12;
 Chart.defaults.plugins.legend.labels.boxWidth = 10;
 Chart.defaults.plugins.legend.labels.boxHeight = 10;

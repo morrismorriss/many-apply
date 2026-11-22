@@ -204,7 +204,7 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = {
   theme: "light",
-  customTheme: { bg: "#fbfaf8", text: "#2f2b28", accent: "#c2577a", sidebar: "#f3f0ec" },
+  customTheme: { bg: "#fcfcfc", text: "#2f2b28", accent: "#8a1c2b", sidebar: "#f5f3f1" },
   currency: "USD",
   categories: [...DEFAULT_CATEGORIES],
   todoist: {

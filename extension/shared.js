@@ -58,7 +58,7 @@ export async function flush() {
 export async function updateBadge() {
   const { queue = [] } = await chrome.storage.local.get("queue");
   await chrome.action.setBadgeText({ text: queue.length ? String(queue.length) : "" });
-  await chrome.action.setBadgeBackgroundColor({ color: "#c2577a" });
+  await chrome.action.setBadgeBackgroundColor({ color: "#8a1c2b" });
 }
 
 // ---- Pattern matching for dates and dollar amounts (same rules as the desktop app). No AI.
