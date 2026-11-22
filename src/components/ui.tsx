@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { STATUS_LABEL, type Grant, type Status } from "../lib/model";
 import { useLookups, useStore } from "../store";
 import { daysUntil, fmtDate, fmtMoney } from "../lib/util";
@@ -322,8 +322,9 @@ export function useAllTags(): string[] {
   return [...new Set((grants ?? []).flatMap((g) => g.fm.tags))].sort();
 }
 
-export function ClientSelect({ value, onChange, className = "inline", allowNew = true }: {
+export function ClientSelect({ value, onChange, className = "inline", allowNew = true, style }: {
   value: string;
+  style?: CSSProperties;
   onChange: (slug: string) => void;
   className?: string;
   allowNew?: boolean;
@@ -333,6 +334,7 @@ export function ClientSelect({ value, onChange, className = "inline", allowNew =
   return (
     <select
       className={className}
+      style={style}
       value={value}
       onChange={async (e) => {
         if (e.target.value === "__new") {

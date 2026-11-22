@@ -92,8 +92,6 @@ function demoFeedItems(): FeedItem[] {
   return [
     { id: "demo-1", feedId: "nycplaywrights", title: "Call for Submissions: Ten-Minute Play Festival", link: "https://example.org/ten-minute", date: ago(1), summary: `Seeking ten-minute plays for a spring festival. No submission fee. Deadline ${soon(30)}. Honorarium $250.`, categories: [] },
     { id: "demo-2", feedId: "artdeadline", title: "Emerging Artist Project Grants", link: "https://example.org/emerging", date: ago(2), summary: `Grants of up to $5,000 for individual artists in any discipline. Applications due ${soon(45)}.`, categories: ["Grants"] },
-    { id: "demo-3", feedId: "grants-gov", title: "Grants for Arts Projects", link: "https://example.org/gap", date: ago(5), summary: `National Endowment for the Arts. Category: Arts. Closing date ${soon(80)}.`, categories: ["Arts"] },
-    { id: "demo-4", feedId: "grants-gov", title: "Rural Broadband Infrastructure", link: "https://example.org/broadband", date: ago(3), summary: "Category: Community Development.", categories: ["Community Development"] },
     { id: "demo-5", feedId: "nycplaywrights", title: "Playwrights' Residency, Summer Session", link: "https://example.org/residency", date: ago(12), summary: "Four-week residency with housing and a $1,000 stipend.", categories: [] },
   ];
 }

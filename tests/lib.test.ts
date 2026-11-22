@@ -352,7 +352,13 @@ describe("feeds", () => {
     expect(mergeFeeds(undefined).map((f) => f.id)).toEqual(DEFAULT_FEEDS.map((f) => f.id));
     const mine = mergeFeeds([{ id: "artdeadline", name: "AD", url: "https://x/feed", enabled: false, match: "" }, { id: "own", name: "Mine", url: "https://y/rss", enabled: true, match: "" }]);
     expect(mine.find((f) => f.id === "artdeadline")?.enabled).toBe(false);
-    expect(mine.map((f) => f.id)).toEqual(["artdeadline", "own", "grants-gov", "nycplaywrights"]);
+    expect(mine.map((f) => f.id)).toEqual(["artdeadline", "own", "nycplaywrights"]);
+  });
+
+  it("drops the retired Grants.gov feed from saved settings", async () => {
+    const { mergeFeeds } = await import("../src/lib/feeds");
+    const saved = [{ id: "grants-gov", name: "Grants.gov", url: "https://www.grants.gov/rss/GG_NewOppByCategory.xml", enabled: true, match: "arts", builtin: true }];
+    expect(mergeFeeds(saved).map((f) => f.id)).not.toContain("grants-gov");
   });
 });
 
@@ -361,5 +367,74 @@ describe("displayText", () => {
     const { displayText } = await import("../src/lib/util");
     expect(displayText("501(c)(3) letter")).toBe("501(‌c)(3) letter");
     expect(displayText("501(c)(3) letter").replace(/‌/g, "")).toBe("501(c)(3) letter");
+  });
+});
+
+describe("donor CSV import", () => {
+  const csv = `First Name,Last Name,Email,Amount,Date,Payment Method,City,State
+Jamie,Rivera,jamie@example.org,"$1,000.00",3/4/2026,check,Pittsburgh,PA
+Jamie,Rivera,JAMIE@example.org,50,2026-06-01,card,,
+Sam,Lee,,25,Feb 1 2026,PayPal,,
+,,,10,2026-01-01,,,
+Pat,Kim,pat@example.org,,,,,`;
+
+  it("guesses columns, merges rows for the same person and logs gifts", async () => {
+    const { autoDonorMapping, planDonorImport, donorDatesAmbiguous } = await import("../src/lib/donorImport");
+    const { headers, rows } = readCsv(csv);
+    const mapping = autoDonorMapping(headers);
+    expect(mapping).toMatchObject({ "First Name": "first_name", Email: "email", Amount: "gift_amount", Date: "gift_date", City: "address", State: "address" });
+    expect(donorDatesAmbiguous(rows, mapping)).toBe(true);
+    const plan = planDonorImport([], rows, { mapping, dateOrder: "us" });
+    expect(plan.created).toBe(3);
+    expect(plan.gifts).toBe(3);
+    expect(plan.giftTotal).toBe(1075);
+    expect(plan.skippedRows).toBe(1);
+    const jamie = plan.entries.find((e) => e.donor.fm.email === "jamie@example.org")!.donor;
+    expect(jamie.fm.name).toBe("Jamie Rivera");
+    expect(jamie.fm.address).toBe("Pittsburgh, PA");
+    expect(jamie.fm.gifts.map((g) => g.date)).toEqual(["2026-06-01", "2026-03-04"]);
+    expect(jamie.fm.stage).toBe("active");
+    expect(plan.entries.find((e) => e.donor.fm.name === "Pat Kim")!.donor.fm.stage).toBe("prospect");
+  });
+
+  it("matches existing donors, keeps their details and skips gifts already logged", async () => {
+    const { autoDonorMapping, planDonorImport, applyDonorImport, undoDonorImport } = await import("../src/lib/donorImport");
+    const { createDonor, readDonor, writeDonor } = await import("../src/lib/donors");
+    const fs = new MemoryFS();
+    const slug = await createDonor(fs, "Jamie R.");
+    const d = await readDonor(fs, `donors/${slug}.md`);
+    d.fm.email = "jamie@example.org";
+    d.fm.address = "1 Main St";
+    d.fm.gifts = [{ date: "2026-03-04", amount: 1000, method: "check", note: "", acknowledged: true }];
+    await writeDonor(fs, d);
+    const before = await fs.readText(`donors/${slug}.md`);
+    const { headers, rows } = readCsv(csv);
+    const plan = planDonorImport([d], rows, { mapping: autoDonorMapping(headers), dateOrder: "us" });
+    expect(plan.updated).toBe(1);
+    expect(plan.created).toBe(2);
+    expect(plan.duplicateGifts).toBe(1);
+    const r = await applyDonorImport(fs, plan);
+    const after = await readDonor(fs, `donors/${slug}.md`);
+    expect(after.fm.name).toBe("Jamie R.");
+    expect(after.fm.address).toBe("1 Main St");
+    expect(after.fm.gifts).toHaveLength(2);
+    await undoDonorImport(fs, r);
+    expect(await fs.readText(`donors/${slug}.md`)).toBe(before);
+    expect(await fs.exists("donors/sam-lee.md")).toBe(false);
+  });
+});
+
+describe("moveDocument", () => {
+  it("moves a document and its file to another client's folder", async () => {
+    const { createDocument, moveDocument, documentFilePath } = await import("../src/lib/documents");
+    const fs = new MemoryFS();
+    const d = await createDocument(fs, "me", { title: "W-9 2026", file: { name: "w9.pdf", copyTo: (p) => fs.writeBytes(p, new Uint8Array([1])) } });
+    await createDocument(fs, "lakeside", { title: "W-9 2026" });
+    const moved = await moveDocument(fs, d, "lakeside");
+    expect(moved.path).toBe("lakeside/w-9-2026-2.md");
+    expect(moved.fm.file).toBe("w-9-2026-2.pdf");
+    expect(await fs.exists(documentFilePath(moved))).toBe(true);
+    expect(await fs.exists("documents/me/w-9-2026.md")).toBe(false);
+    expect(await fs.exists("documents/me/w-9-2026.pdf")).toBe(false);
   });
 });

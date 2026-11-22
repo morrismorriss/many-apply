@@ -141,6 +141,31 @@ export async function setDocumentFile(
   return next;
 }
 
+/** Move a document (and its file) into another client's folder. Returns the moved document. */
+export async function moveDocument(fs: VaultFS, d: VaultDocument, owner: string): Promise<VaultDocument> {
+  if (documentOwner(d) === owner) return d;
+  await fs.mkdir(`documents/${owner}`);
+  const stem = basename(d.path).replace(/\.md$/, "");
+  const ext = d.fm.file ? extOf(d.fm.file) : "";
+  const fileStem = d.fm.file ? d.fm.file.replace(/\.[^.]+$/, "") : "";
+  const taken = async (b: string, f: string) =>
+    (await fs.exists(`documents/${owner}/${b}.md`)) || (!!f && (await fs.exists(`documents/${owner}/${f}`)));
+  let base = stem;
+  let file = d.fm.file;
+  for (let i = 2; await taken(base, file); i++) {
+    base = `${stem}-${i}`;
+    // Keep a file named after its document in step; any other name just gets the same suffix.
+    file = d.fm.file ? `${fileStem === stem ? base : `${fileStem}-${i}`}${ext ? `.${ext}` : ""}` : "";
+  }
+  const oldFile = documentFilePath(d);
+  if (oldFile && (await fs.exists(oldFile))) await fs.rename(oldFile, `documents/${owner}/${file}`);
+  else file = d.fm.file;
+  const next: VaultDocument = { ...d, path: `${owner}/${base}.md`, fm: { ...d.fm, file } };
+  await writeDocument(fs, next);
+  await fs.remove(`documents/${d.path}`);
+  return next;
+}
+
 export function documentPaths(d: VaultDocument): string[] {
   const f = documentFilePath(d);
   return [`documents/${d.path}`, ...(f ? [f] : [])];

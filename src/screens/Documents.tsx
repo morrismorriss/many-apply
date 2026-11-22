@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLookups, useStore } from "../store";
-import { Empty } from "../components/ui";
+import { ClientSelect, Empty } from "../components/ui";
 import {
   DOC_EXTENSIONS,
   DOC_TYPES,
@@ -62,6 +62,8 @@ export function Documents() {
   const [type, setType] = useState("");
   const [q, setQ] = useState("");
   const [over, setOver] = useState(false);
+  // Who new documents are for. Follows the sidebar's client filter until changed here.
+  const [forPick, setForPick] = useState<{ filter: string; slug: string } | null>(null);
   const [noteHidden, setNoteHidden] = useState(getPref("documentsNoteHidden") === "1");
 
   const owners = data.clients.map((c) => c.slug).filter((o) => !clientFilter || o === clientFilter);
@@ -70,7 +72,7 @@ export function Documents() {
   const items = visible.filter(
     (d) => (!type || d.fm.type === type) && (!ql || d.fm.title.toLowerCase().includes(ql) || d.fm.type.toLowerCase().includes(ql) || d.body.toLowerCase().includes(ql)),
   );
-  const target = clientFilter || "me";
+  const target = forPick && forPick.filter === clientFilter && data.clients.some((c) => c.slug === forPick.slug) ? forPick.slug : clientFilter || "me";
   const types = [...new Set([...DOC_TYPES, ...visible.map((d) => d.fm.type)])];
   const attention = visible.filter((d) => ["expired", "soon"].includes(expiryState(d))).length;
 
@@ -82,6 +84,10 @@ export function Documents() {
           <div className="sub">Contracts, tax forms and legal paperwork that applications ask for again and again.</div>
         </div>
         <span className="spacer" />
+        <label className="row small soft" style={{ gap: 6 }}>
+          For
+          <ClientSelect className="select" style={{ width: "auto", maxWidth: 220 }} value={target} onChange={(slug) => setForPick({ filter: clientFilter, slug })} />
+        </label>
         <button className="btn primary" onClick={() => void add.pick(target)}>+ Add documents</button>
       </div>
 

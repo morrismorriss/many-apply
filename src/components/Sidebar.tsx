@@ -78,7 +78,6 @@ export function Sidebar() {
           {counts[n.id] ? <span className="count">{counts[n.id]}</span> : null}
         </button>
       ))}
-      <div className="sidebar-sep" />
       <button
         className={`nav-item${feedsOpen ? " active" : ""}`}
         aria-expanded={feedsOpen}

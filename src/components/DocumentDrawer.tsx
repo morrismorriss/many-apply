@@ -1,8 +1,8 @@
 import { useStore } from "../store";
-import { InlineDate, InlineText, TagInput } from "./ui";
+import { ClientSelect, InlineDate, InlineText, TagInput } from "./ui";
 import { confirmAction } from "./dialogs";
 import { trash } from "../lib/vault";
-import { DOC_EXTENSIONS, DOC_TYPES, documentFilePath, documentPaths, setDocumentFile, type VaultDocument } from "../lib/documents";
+import { DOC_EXTENSIONS, DOC_TYPES, documentFilePath, documentOwner, documentPaths, moveDocument, setDocumentFile, type VaultDocument } from "../lib/documents";
 import { previewMime } from "../lib/samples";
 import { errorText, openVaultFile, pickFiles } from "../lib/platform";
 import { ExpiryText } from "../screens/Documents";
@@ -15,6 +15,7 @@ export function DocumentDrawer({ path }: { path: string }) {
   const save = useStore((s) => s.saveDocument);
   const mutate = useStore((s) => s.mutate);
   const close = useStore((s) => s.closeDrawer);
+  const openDrawer = useStore((s) => s.openDrawer);
   const toast = useStore((s) => s.toast);
   if (!d) return <p className="muted">This document isn't in the vault any more.</p>;
   const set = (patch: Partial<VaultDocument["fm"]>) => save({ ...d, fm: { ...d.fm, ...patch } });
@@ -30,6 +31,17 @@ export function DocumentDrawer({ path }: { path: string }) {
       toast(d.fm.file ? "Replaced the file. The old one is in trash." : "Uploaded");
     } catch (e) {
       toast(`Couldn't add that file: ${errorText(e)}`, "error");
+    }
+  };
+
+  const move = async (owner: string) => {
+    if (owner === documentOwner(d)) return;
+    try {
+      const next = await mutate((v) => moveDocument(v, d, owner));
+      openDrawer({ kind: "document", id: next.path });
+      toast(`Moved to documents/${owner}/`);
+    } catch (e) {
+      toast(`Couldn't move it: ${errorText(e)}`, "error");
     }
   };
 
@@ -55,6 +67,10 @@ export function DocumentDrawer({ path }: { path: string }) {
 
       <section>
         <div className="props">
+          <div className="k">For</div>
+          <div className="v">
+            <ClientSelect className="select inline" value={documentOwner(d)} onChange={(slug) => void move(slug)} />
+          </div>
           <div className="k">Type</div>
           <div className="v">
             <select className="select inline" value={d.fm.type} onChange={(e) => set({ type: e.target.value })}>
