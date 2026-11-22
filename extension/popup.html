@@ -1,0 +1,54 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header>
+      <img src="icons/icon48.png" alt="" />
+      <b>Save to Many Apply</b>
+      <span id="status" class="muted"></span>
+    </header>
+    <section id="pair" hidden>
+      <p>Enter the pairing code from <b>Many Apply → Settings → Chrome extension</b>.</p>
+      <div class="row">
+        <input id="code" inputmode="numeric" maxlength="6" placeholder="123456" />
+        <button id="saveCode" class="primary">Pair</button>
+      </div>
+    </section>
+    <form id="form">
+      <label>Title <input id="title" required /></label>
+      <label>URL <input id="url" /></label>
+      <label>Funder <input id="funder" placeholder="Optional" /></label>
+      <div class="row">
+        <label>Deadline <input id="deadline" type="date" /></label>
+        <label>Amount <input id="amount" inputmode="decimal" placeholder="$" /></label>
+      </div>
+      <div id="suggest" class="chips"></div>
+      <label>Highlighted text
+        <textarea id="selection" rows="4" placeholder="Highlight text on the page before opening this, or paste here."></textarea>
+      </label>
+      <div class="row radio">
+        <label><input type="radio" name="target" value="eligibility" checked /> Eligibility</label>
+        <label><input type="radio" name="target" value="questions" /> Questions</label>
+      </div>
+      <div class="row">
+        <label>Status
+          <select id="statusSel">
+            <option value="researching">Researching</option>
+            <option value="planning">Planning</option>
+            <option value="drafting">Drafting</option>
+          </select>
+        </label>
+        <label>Tags <input id="tags" placeholder="theater, residency" /></label>
+      </div>
+      <div class="row end">
+        <button type="button" id="repair" class="link">Pairing</button>
+        <button type="submit" class="primary">Save</button>
+      </div>
+    </form>
+    <p id="msg"></p>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>
