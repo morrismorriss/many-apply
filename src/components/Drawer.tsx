@@ -3,11 +3,13 @@ import { GrantDrawer } from "./GrantDrawer";
 import { FunderDrawer } from "./FunderDrawer";
 import { ClientDrawer } from "./ClientDrawer";
 import { LibraryDrawer } from "./LibraryDrawer";
+import { DonorDrawer } from "./DonorDrawer";
 
 const LABEL: Record<DrawerTarget["kind"], string> = {
   grant: "Application",
   funder: "Funder",
   client: "Client",
+  donor: "Donor",
   library: "Library",
 };
 
@@ -36,6 +38,7 @@ export function Drawer({ target }: { target: DrawerTarget }) {
         {target.kind === "grant" && <GrantDrawer key={target.id} folder={target.id} />}
         {target.kind === "funder" && <FunderDrawer key={target.id} slug={target.id} />}
         {target.kind === "client" && <ClientDrawer key={target.id} slug={target.id} />}
+        {target.kind === "donor" && <DonorDrawer key={target.id} slug={target.id} />}
         {target.kind === "library" && <LibraryDrawer key={target.id} path={target.id} />}
       </div>
     </aside>

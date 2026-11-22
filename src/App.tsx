@@ -10,6 +10,7 @@ import { CalendarScreen } from "./screens/Calendar";
 import { Library } from "./screens/Library";
 import { Funders } from "./screens/Funders";
 import { Clients } from "./screens/Clients";
+import { Giving } from "./screens/Giving";
 import { Reports } from "./screens/Reports";
 import { ImportScreen } from "./screens/Import";
 import { SettingsScreen } from "./screens/Settings";
@@ -95,6 +96,7 @@ export default function App() {
     case "library": screen = <Library />; break;
     case "funders": screen = <Funders />; break;
     case "clients": screen = <Clients />; break;
+    case "giving": screen = <Giving />; break;
     case "reports": screen = <Reports />; break;
     case "import": screen = <ImportScreen />; break;
     case "settings": screen = <SettingsScreen />; break;

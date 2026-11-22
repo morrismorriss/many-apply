@@ -18,11 +18,12 @@ import {
   type StatusEvent,
 } from "./model";
 import { asArray, parseNumber, slugify, str, todayISO, wordCount } from "./util";
+import { readDonor, type Donor } from "./donors";
 
 export const GRANT_ORDER = [
   "title", "client", "funder", "url", "type", "status", "starred", "amount_requested", "amount_awarded",
   "max_award", "currency", "deadline", "deadline_type", "project", "location", "tags", "submitted_on",
-  "decision_expected", "decision_on", "todoist_task_ids", "reports", "created", "updated", "status_history",
+  "decision_expected", "decision_on", "todoist_task_ids", "reports", "created", "updated", "status_history", "time_log",
 ];
 const FUNDER_ORDER = ["name", "website", "funder_type", "contacts", "notes"];
 const CLIENT_ORDER = [
@@ -35,6 +36,7 @@ export interface VaultData {
   grants: Grant[];
   funders: Funder[];
   clients: Client[];
+  donors: Donor[];
   library: LibraryItem[];
   libraryFolders: string[]; // relative to library/, excluding budgets
   budgetTemplates: string[]; // file names in library/budgets
@@ -96,6 +98,12 @@ export function normalizeGrant(raw: Record<string, unknown>, folder: string): Gr
     created: dateStr(raw.created) || todayISO(),
     updated: dateStr(raw.updated) || todayISO(),
     status_history: history.length ? history : [{ status, date: dateStr(raw.created) || todayISO() }],
+    time_log: Array.isArray(raw.time_log)
+      ? (raw.time_log as Record<string, unknown>[])
+          .filter((t) => t && typeof t === "object")
+          .map((t) => ({ date: dateStr(t.date), minutes: Math.max(0, Math.round(parseNumber(t.minutes) ?? 0)), note: str(t.note) }))
+          .filter((t) => t.minutes > 0)
+      : [],
   };
   return fm;
 }
@@ -235,6 +243,7 @@ export async function loadVault(fs: VaultFS): Promise<VaultData> {
   const budgetTemplates: string[] = [];
   const funderFiles: string[] = [];
   const clientFiles: string[] = [];
+  const donorFiles: string[] = [];
   const libFiles: string[] = [];
 
   for (const e of entries) {
@@ -248,6 +257,8 @@ export async function loadVault(fs: VaultFS): Promise<VaultData> {
       funderFiles.push(e.path);
     } else if (parts[0] === "clients" && parts.length === 2 && e.path.endsWith(".md")) {
       clientFiles.push(e.path);
+    } else if (parts[0] === "donors" && parts.length === 2 && e.path.endsWith(".md")) {
+      donorFiles.push(e.path);
     } else if (parts[0] === "library" && parts.length >= 2) {
       const rel = parts.slice(1).join("/");
       if (parts[1] === "budgets") {
@@ -281,6 +292,7 @@ export async function loadVault(fs: VaultFS): Promise<VaultData> {
   const funders = await Promise.all(funderFiles.map((p) => readFunder(fs, p)));
   const clients = await Promise.all(clientFiles.map((p) => readClient(fs, p)));
   const library = await Promise.all(libFiles.map((p) => readLibrary(fs, p)));
+  const donors = (await Promise.all(donorFiles.map((p) => readDonor(fs, p)))).sort((a, b) => a.fm.name.localeCompare(b.fm.name));
 
   if (!clients.some((c) => c.slug === ME)) clients.unshift(blankClient(ME, "Me"));
   clients.sort((a, b) => (a.slug === ME ? -1 : b.slug === ME ? 1 : a.fm.name.localeCompare(b.fm.name)));
@@ -293,6 +305,7 @@ export async function loadVault(fs: VaultFS): Promise<VaultData> {
     grants,
     funders,
     clients,
+    donors,
     library: library.sort((a, b) => a.path.localeCompare(b.path)),
     libraryFolders: [...libFolders].sort(),
     budgetTemplates: budgetTemplates.sort(),
@@ -400,7 +413,7 @@ export async function saveSettings(fs: VaultFS, s: Settings) {
 
 /** Create the vault skeleton in an empty (or existing) folder. Safe to run repeatedly. */
 export async function initVault(fs: VaultFS) {
-  for (const d of ["grants", "clients", "library/shared", "library/me", "library/budgets", "funders", ".manyapply"]) {
+  for (const d of ["grants", "clients", "donors", "library/shared", "library/me", "library/budgets", "funders", ".manyapply"]) {
     await fs.mkdir(d);
   }
   if (!(await fs.exists("clients/me.md"))) await writeClient(fs, blankClient(ME, "Me"));

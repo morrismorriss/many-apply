@@ -1,4 +1,5 @@
 import { useStore, useGrants, type ScreenId } from "../store";
+import { TimerChip } from "./ui";
 
 const NAV: { id: ScreenId; label: string; icon: string }[] = [
   { id: "dashboard", label: "Dashboard", icon: "◧" },
@@ -8,6 +9,7 @@ const NAV: { id: ScreenId; label: string; icon: string }[] = [
   { id: "library", label: "Library", icon: "❏" },
   { id: "funders", label: "Funders", icon: "⌂" },
   { id: "clients", label: "Clients", icon: "☺" },
+  { id: "giving", label: "Individual Giving", icon: "♡" },
   { id: "reports", label: "Reports", icon: "▤" },
   { id: "import", label: "Import", icon: "⇪" },
   { id: "settings", label: "Settings", icon: "⚙" },
@@ -56,6 +58,7 @@ export function Sidebar() {
           {counts[n.id] ? <span className="count">{counts[n.id]}</span> : null}
         </button>
       ))}
+      <TimerChip />
       <div className="sidebar-foot" title={root}>
         {root}
       </div>
