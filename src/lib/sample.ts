@@ -144,6 +144,36 @@ export function sampleVault(today = new Date()): { files: Record<string, string>
     "Contract runs through June. Board chair prefers drafts as Google Docs.\n",
   );
 
+  const donor = (slug: string, fm: Record<string, unknown>, body = "") => {
+    files[`donors/${slug}.md`] = stringifyFrontmatter({ tags: [], gifts: [], touches: [], created: d(-400), ...fm }, body);
+  };
+  donor("ruth-okafor", {
+    name: "Ruth Okafor", email: "ruth@example.org", stage: "major", tags: ["board", "made-men"],
+    next_followup: d(-2), next_step: "Invite to the Made Men reading",
+    gifts: [
+      { date: d(-40), amount: 2500, method: "Check", note: "Made Men development", acknowledged: false },
+      { date: d(-380), amount: 1500, method: "Check", note: "", acknowledged: true },
+    ],
+    touches: [{ date: d(-38), kind: "call", note: "Thanked by phone; letter still to send" }],
+  }, "Retired steelworker's daughter. Loves new plays about the Mon Valley.\n");
+  donor("sam-whitfield", {
+    name: "Sam Whitfield", email: "sam@example.org", stage: "active", tags: ["newsletter"],
+    next_followup: d(21), next_step: "Year-end appeal",
+    gifts: [
+      { date: d(-120), amount: 100, method: "Venmo", note: "", acknowledged: true },
+      { date: d(-300), amount: 75, method: "Card", note: "", acknowledged: true },
+    ],
+  });
+  donor("priya-raman", {
+    name: "Priya Raman", organization: "Raman Family Fund", stage: "prospect", tags: ["family-foundation"],
+    next_followup: d(7), next_step: "Coffee to talk about the summer workshop",
+    touches: [{ date: d(-10), kind: "event", note: "Met at the City Theatre opening" }],
+  });
+  donor("tom-becker", {
+    name: "Tom Becker", email: "tom@example.org", stage: "active",
+    gifts: [{ date: d(-650), amount: 250, method: "Check", note: "", acknowledged: true }],
+  });
+
   const lib = (path: string, title: string, tags: string[], body: string, used: string[] = []) => {
     files[`library/${path}`] = stringifyFrontmatter({ title, tags, word_count: 0, used_in: used }, body);
   };

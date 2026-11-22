@@ -22,7 +22,7 @@ export function parseFrontmatter<T = Record<string, unknown>>(text: string): Par
 }
 
 /** Keys whose list items are written in compact flow style, like the spec's examples. */
-const FLOW_ITEM_KEYS = new Set(["reports", "status_history"]);
+const FLOW_ITEM_KEYS = new Set(["reports", "status_history", "gifts", "touches", "time_log"]);
 
 /**
  * Serialise frontmatter + body. Empty values are written as bare keys (`submitted_on:`)

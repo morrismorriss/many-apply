@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useLookups, useStore } from "../store";
 import {
   autoMapping,
@@ -22,7 +22,7 @@ import {
 import { pickFile, saveFile } from "../lib/platform";
 import { STATUSES, STATUS_LABEL, type Status } from "../lib/model";
 import { askText, confirmAction } from "../components/dialogs";
-import { StatusPill } from "../components/ui";
+import { InlineText, StatusPill } from "../components/ui";
 import { fmtDate, fmtMoney } from "../lib/util";
 
 const FIELD_OPTIONS = [
@@ -132,7 +132,11 @@ function Importer() {
   const toast = useStore((s) => s.toast);
   const go = useStore((s) => s.go);
   const { funderName, clientName } = useLookups();
-  const [file, setFile] = useState<{ name: string; csv: ParsedCsv } | null>(null);
+  // `lines` holds each remaining row's original spreadsheet row number, so
+  // labels stay meaningful after rows are removed.
+  const [file, setFile] = useState<{ name: string; csv: ParsedCsv; lines: number[]; total: number } | null>(null);
+  const [editing, setEditing] = useState<number | null>(null);
+  const [shown, setShown] = useState(50);
   const [mapping, setMapping] = useState<Mapping | null>(null);
   const [result, setResult] = useState<ImportLog | null>(null);
   const [logs, setLogs] = useState<ImportLog[]>([]);
@@ -150,9 +154,11 @@ function Importer() {
     }
     // Pick a saved preset whose columns all exist in this file.
     const preset = data.settings.importPresets.find((p) => Object.keys(p.columns).every((h) => csv.headers.includes(h)));
-    setFile({ name, csv });
+    setFile({ name, csv, lines: csv.rows.map((_, i) => i + 2), total: csv.rows.length });
     setMapping(autoMapping(csv, preset));
     setResult(null);
+    setEditing(null);
+    setShown(50);
     if (preset) toast(`Using saved mapping "${preset.name}"`);
   };
 
@@ -174,11 +180,29 @@ function Importer() {
     setMapping({ ...mapping, columns, statuses });
   };
 
+  const removeRow = (i: number) => {
+    if (!file) return;
+    setFile({ ...file, csv: { ...file.csv, rows: file.csv.rows.filter((_, j) => j !== i) }, lines: file.lines.filter((_, j) => j !== i) });
+    setEditing((e) => (e === null || e === i ? null : e > i ? e - 1 : e));
+  };
+
+  const editCell = (i: number, header: string, value: string) => {
+    if (!file || !mapping) return;
+    const rows = file.csv.rows.map((r, j) => (j === i ? { ...r, [header]: value } : r));
+    const csv = { ...file.csv, rows };
+    setFile({ ...file, csv });
+    // A new status word needs a match too.
+    const statuses = { ...mapping.statuses };
+    let changed = false;
+    for (const v of distinctStatusValues(csv, mapping)) if (!(v in statuses)) { statuses[v] = guessStatus(v); changed = true; }
+    if (changed) setMapping({ ...mapping, statuses });
+  };
+
   const doImport = async () => {
     if (!file || !mapping) return;
     setBusy(true);
     try {
-      const log = await mutate((fs) => runImport(fs, preview, mapping, file.name));
+      const log = await mutate((fs) => runImport(fs, preview, mapping, file.name, file.lines));
       setResult(log);
       refreshLogs();
       const name = await askText("Save this mapping?", {
@@ -206,16 +230,30 @@ function Importer() {
       {!file && (
         <div
           className={`drop-zone${over ? " over" : ""}`}
-          onDragOver={(e) => {
+          onDragEnter={(e) => {
             e.preventDefault();
             setOver(true);
           }}
-          onDragLeave={() => setOver(false)}
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "copy";
+            setOver(true);
+          }}
+          onDragLeave={(e) => {
+            // Moving over the zone's own children fires dragleave too.
+            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(false);
+          }}
           onDrop={async (e) => {
             e.preventDefault();
+            e.stopPropagation();
             setOver(false);
             const f = e.dataTransfer.files[0];
-            if (f) load(f.name, await f.text());
+            if (!f) return;
+            if (!/\.(csv|tsv|txt)$/i.test(f.name)) {
+              toast("Drop a .csv file (or .tsv / .txt).", "error");
+              return;
+            }
+            load(f.name, await f.text());
           }}
           onClick={async () => {
             const f = await pickFile(["csv", "tsv", "txt"]);
@@ -260,7 +298,7 @@ function Importer() {
         <>
           <div className="panel">
             <h2>
-              {file.name} <span className="muted small" style={{ fontWeight: 400 }}>{file.csv.rows.length} rows · {file.csv.delimiter === ";" ? "semicolons" : file.csv.delimiter === "\t" ? "tabs" : "commas"}</span>
+              {file.name} <span className="muted small" style={{ fontWeight: 400 }}>{file.csv.rows.length} rows{file.total > file.csv.rows.length ? ` (${file.total - file.csv.rows.length} removed)` : ""} · {file.csv.delimiter === ";" ? "semicolons" : file.csv.delimiter === "\t" ? "tabs" : "commas"}</span>
               <span className="grow" />
               {data.settings.importPresets.length > 0 && (
                 <select
@@ -339,7 +377,7 @@ function Importer() {
           )}
 
           <div className="panel">
-            <h2>Preview <span className="muted small" style={{ fontWeight: 400 }}>first 20 rows</span></h2>
+            <h2>Review rows <span className="muted small" style={{ fontWeight: 400 }}>edit or remove rows before importing. Your original file isn't changed.</span></h2>
             <div className="row wrap small" style={{ marginBottom: 10 }}>
               {errors > 0 && <span className="danger-text">{errors} without a title (will be skipped)</span>}
               {warnings > 0 && <span className="warn-text">{warnings} with warnings</span>}
@@ -356,12 +394,13 @@ function Importer() {
             <div style={{ overflowX: "auto" }}>
               <table className="table small">
                 <thead>
-                  <tr><th>Row</th><th>Title</th><th>Funder</th><th>Deadline</th><th className="r">Amount</th><th>Status</th><th>Notes</th></tr>
+                  <tr><th>Row</th><th>Title</th><th>Funder</th><th>Deadline</th><th className="r">Amount</th><th>Status</th><th>Notes</th><th /></tr>
                 </thead>
                 <tbody>
-                  {preview.slice(0, 20).map((p) => (
-                    <tr key={p.index} style={p.error ? { opacity: 0.55 } : undefined}>
-                      <td className="muted">{p.index + 2}</td>
+                  {preview.slice(0, shown).map((p) => (
+                    <Fragment key={file.lines[p.index]}>
+                    <tr style={p.error ? { opacity: 0.55 } : undefined}>
+                      <td className="muted">{file.lines[p.index]}</td>
                       <td style={{ fontWeight: 550 }}>{p.fm.title ?? <span className="danger-text">Missing</span>}</td>
                       <td>{p.funderName ?? ""}</td>
                       <td>{p.fm.deadline ? fmtDate(p.fm.deadline, { year: true }) : ""}</td>
@@ -372,11 +411,40 @@ function Importer() {
                         {p.duplicateOf && <div className="warn-text">Duplicate · will {mapping.duplicate}</div>}
                         {p.warnings.map((w, i) => <div key={i} className="warn-text">{w}</div>)}
                       </td>
+                      <td className="r" style={{ whiteSpace: "nowrap" }}>
+                        <button className="btn small ghost" onClick={() => setEditing(editing === p.index ? null : p.index)}>
+                          {editing === p.index ? "Done" : "Edit"}
+                        </button>
+                        <button className="icon-btn" title="Remove this row from the import" onClick={() => removeRow(p.index)}>×</button>
+                      </td>
                     </tr>
+                    {editing === p.index && (
+                      <tr className="edit-rows">
+                        <td />
+                        <td colSpan={7}>
+                          <div className="props" style={{ margin: "4px 0 10px" }}>
+                            {file.csv.headers.map((h) => (
+                              <Fragment key={h}>
+                                <div className="k">{h}</div>
+                                <div className="v">
+                                  <InlineText value={file.csv.rows[p.index]?.[h] ?? ""} placeholder="Empty" onSave={(v) => editCell(p.index, h, v)} />
+                                </div>
+                              </Fragment>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
             </div>
+            {preview.length > shown && (
+              <button className="btn small ghost" style={{ marginTop: 8 }} onClick={() => setShown(shown + 100)}>
+                Show more ({preview.length - shown} more rows)
+              </button>
+            )}
             <div className="row" style={{ marginTop: 14 }}>
               <span className="grow muted small">
                 Writes one folder per row in grants/. A log is saved in .manyapply/imports/ so you can undo.

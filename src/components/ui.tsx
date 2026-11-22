@@ -400,3 +400,43 @@ export function WordMeter({ count, limit, unit }: { count: number; limit: number
     </div>
   );
 }
+
+/** Re-render every `ms` while `on` is true; returns the current time. */
+export function useNow(on: boolean, ms = 1000): number {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!on) return;
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), ms);
+    return () => clearInterval(id);
+  }, [on, ms]);
+  return now;
+}
+
+/** 3725000 ms -> "1:02:05" */
+export function fmtElapsed(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  return `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+}
+
+/** The running timer, shown in the sidebar so it can be stopped from anywhere. */
+export function TimerChip() {
+  const timer = useStore((s) => s.timer);
+  const stop = useStore((s) => s.stopTimer);
+  const open = useStore((s) => s.openDrawer);
+  const now = useNow(!!timer);
+  if (!timer) return null;
+  return (
+    <div className="timer-chip">
+      <button className="timer-title ellipsis" title={`Open ${timer.title}`} onClick={() => open({ kind: "grant", id: timer.folder })}>
+        <span className="timer-dot" aria-hidden />
+        {timer.title}
+      </button>
+      <span className="num">{fmtElapsed(now - timer.start)}</span>
+      <button className="btn small" onClick={() => void stop()}>Stop</button>
+    </div>
+  );
+}

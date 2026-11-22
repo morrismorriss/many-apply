@@ -11,7 +11,9 @@ import {
   StatusPill,
   TagInput,
   WordMeter,
+  fmtElapsed,
   useAllTags,
+  useNow,
 } from "./ui";
 import { confirmAction } from "./dialogs";
 import {
@@ -27,7 +29,7 @@ import {
 import { addQuestionToBody, bodySection, listAttachments, parseQuestions, readDraft, setBodySection, GRANT_ORDER } from "../lib/vault";
 import { budgetTotals, parseBudgetCsv } from "../lib/budget";
 import { suggestFor } from "../lib/library";
-import { fmtDate, fmtMoney, slugify, todayISO, wordCount } from "../lib/util";
+import { fmtDate, fmtMinutes, fmtMoney, slugify, todayISO, wordCount } from "../lib/util";
 import { openExternal } from "../lib/platform";
 
 const openExternalSafe = (u: string) => void openExternal(u).catch(() => {});
@@ -163,6 +165,10 @@ export function GrantDrawer({ folder }: { folder: string }) {
         </div>
       </section>
 
+      <SubmittedText folder={folder} />
+
+      <TimeLog g={g} />
+
       {(f.status === "awarded" || f.reports.length > 0) && <Reports g={g} />}
 
       <Questions g={g} />
@@ -229,6 +235,154 @@ function ExtraField({ k, value, onSave }: { k: string; value: unknown; onSave: (
         )}
       </div>
     </>
+  );
+}
+
+// ------------------------------------------------------------------ Submitted text
+
+/** The full text that was sent, kept in its own file so pasted headings can't disturb grant.md. */
+function SubmittedText({ folder }: { folder: string }) {
+  const fs = useStore((s) => s.fs);
+  const mutate = useStore((s) => s.mutate);
+  const toast = useStore((s) => s.toast);
+  const path = `grants/${folder}/submitted.md`;
+  const [text, setText] = useState<string | null>(null);
+  useEffect(() => {
+    if (!fs) return;
+    let live = true;
+    fs.readText(path).then((t) => live && setText(t.trim())).catch(() => live && setText(""));
+    return () => {
+      live = false;
+    };
+  }, [fs, path]);
+  if (text === null) return null;
+  return (
+    <section>
+      <h3>
+        Submitted application <span className="spacer" />
+        <span className="muted small" style={{ fontWeight: 400 }}>
+          {wordCount(text).toLocaleString("en-US")} words
+        </span>
+      </h3>
+      <InlineText
+        multiline
+        className="inline submitted-text"
+        value={text}
+        placeholder="Paste or write the full text you submitted, so you have a record of it. Saved when you click away."
+        onSave={async (v) => {
+          setText(v);
+          await mutate((f) => f.writeText(path, v ? v + "\n" : ""));
+          toast("Saved submitted text");
+        }}
+      />
+      <span className="muted small">Saved in grants/{folder}/submitted.md</span>
+    </section>
+  );
+}
+
+// ------------------------------------------------------------------ Time
+
+function TimeLog({ g }: { g: Grant }) {
+  const timer = useStore((s) => s.timer);
+  const start = useStore((s) => s.startTimer);
+  const stop = useStore((s) => s.stopTimer);
+  const discard = useStore((s) => s.discardTimer);
+  const logTime = useStore((s) => s.logTime);
+  const update = useStore((s) => s.updateGrant);
+  const mine = timer?.folder === g.folder;
+  const now = useNow(mine);
+  const [note, setNote] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [mDate, setMDate] = useState(todayISO());
+  const [mHours, setMHours] = useState("");
+  const [mMins, setMMins] = useState("");
+  const [mNote, setMNote] = useState("");
+  const log = g.fm.time_log;
+  const total = log.reduce((s, t) => s + t.minutes, 0);
+  const entries = log.map((t, i) => ({ t, i })).sort((a, b) => b.t.date.localeCompare(a.t.date) || b.i - a.i);
+  const manualMinutes = (parseFloat(mHours) || 0) * 60 + (parseInt(mMins, 10) || 0);
+
+  return (
+    <section>
+      <h3>
+        Time <span className="spacer" />
+        <span className="muted small" style={{ fontWeight: 400 }}>{total ? `${fmtMinutes(total)} total` : "Nothing logged yet"}</span>
+      </h3>
+      {mine ? (
+        <div className="panel stack" style={{ padding: 12 }}>
+          <div className="timer-running">
+            <span className="timer-dot" aria-hidden />
+            <span className="num">{fmtElapsed(now - timer!.start)}</span>
+            <span className="grow" />
+            <button className="btn small ghost" onClick={discard} title="Stop without logging">Discard</button>
+            <button className="btn small primary" onClick={() => { void stop(note.trim()); setNote(""); }}>Stop &amp; log</button>
+          </div>
+          <input className="input" placeholder="What are you working on? (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
+        </div>
+      ) : (
+        <div className="row">
+          <button className="btn small" onClick={() => void start(g.folder)}>
+            ▶ Start timer{timer ? " (stops the other one)" : ""}
+          </button>
+          {!adding && <button className="btn small ghost" onClick={() => setAdding(true)}>+ Add time by hand</button>}
+        </div>
+      )}
+      {adding && (
+        <div className="panel stack" style={{ padding: 12, marginTop: 8 }}>
+          <div className="row">
+            <label className="field">
+              Date
+              <input className="input" type="date" value={mDate} onChange={(e) => setMDate(e.target.value)} />
+            </label>
+            <label className="field" style={{ width: 80 }}>
+              Hours
+              <input className="input" inputMode="decimal" autoFocus placeholder="1" value={mHours} onChange={(e) => setMHours(e.target.value.replace(/[^\d.]/g, ""))} />
+            </label>
+            <label className="field" style={{ width: 80 }}>
+              Minutes
+              <input className="input" inputMode="numeric" placeholder="30" value={mMins} onChange={(e) => setMMins(e.target.value.replace(/\D/g, ""))} />
+            </label>
+          </div>
+          <input className="input" placeholder="Note (optional)" value={mNote} onChange={(e) => setMNote(e.target.value)} />
+          <div className="row">
+            <span className="grow" />
+            <button className="btn ghost small" onClick={() => setAdding(false)}>Cancel</button>
+            <button
+              className="btn primary small"
+              disabled={manualMinutes < 1 || !mDate}
+              onClick={async () => {
+                await logTime(g.folder, { date: mDate, minutes: Math.round(manualMinutes), note: mNote.trim() });
+                setAdding(false);
+                setMHours("");
+                setMMins("");
+                setMNote("");
+              }}
+            >
+              Add
+            </button>
+          </div>
+        </div>
+      )}
+      {entries.length > 0 && (
+        <div className="stack" style={{ gap: 2, marginTop: 8 }}>
+          {entries.slice(0, 12).map(({ t, i }) => (
+            <div key={i} className="row small">
+              <span className="muted num" style={{ width: 96, flex: "none" }}>{fmtDate(t.date, { year: true })}</span>
+              <span className="num" style={{ width: 64, flex: "none" }}>{fmtMinutes(t.minutes)}</span>
+              <span className="grow soft ellipsis">{t.note}</span>
+              <button
+                className="icon-btn"
+                title="Remove entry"
+                onClick={() => update(g.folder, (x) => ({ ...x, fm: { ...x.fm, time_log: x.fm.time_log.filter((_, j) => j !== i) } }))}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+          {entries.length > 12 && <span className="muted small">and {entries.length - 12} earlier entries</span>}
+        </div>
+      )}
+    </section>
   );
 }
 

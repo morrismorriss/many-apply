@@ -12,6 +12,10 @@ import "./styles/app.css";
 import "./lib/charts";
 import App from "./App";
 
+// A file dropped outside a drop zone would otherwise make the window open it
+// and leave the app. Drop zones handle their own events first.
+for (const ev of ["dragover", "drop"]) window.addEventListener(ev, (e) => e.preventDefault());
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <App />

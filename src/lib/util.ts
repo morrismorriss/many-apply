@@ -142,3 +142,10 @@ export function debounce<A extends unknown[]>(fn: (...a: A) => void, ms: number)
     t = setTimeout(() => fn(...a), ms);
   };
 }
+
+/** 95 -> "1h 35m", 40 -> "40m" */
+export function fmtMinutes(m: number): string {
+  const h = Math.floor(m / 60);
+  const r = Math.round(m % 60);
+  return h ? (r ? `${h}h ${r}m` : `${h}h`) : `${r}m`;
+}

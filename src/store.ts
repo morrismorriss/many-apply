@@ -18,14 +18,15 @@ import {
   writeLibrary,
   type VaultData,
 } from "./lib/vault";
-import type { Client, Funder, Grant, GrantFM, LibraryItem, ReportDate, Settings, Status } from "./lib/model";
+import type { Client, Funder, Grant, GrantFM, LibraryItem, ReportDate, Settings, Status, TimeEntry } from "./lib/model";
 import { ME } from "./lib/model";
 import * as todoist from "./lib/todoist";
 import { calendarEvents, toICS } from "./lib/stats";
-import { debounce } from "./lib/util";
+import { debounce, fmtMinutes, todayISO } from "./lib/util";
+import { createDonor, writeDonor, type Donor } from "./lib/donors";
 
 export type ScreenId =
-  | "dashboard" | "research" | "pipeline" | "calendar" | "library" | "funders" | "clients" | "reports" | "import" | "settings";
+  | "dashboard" | "research" | "pipeline" | "calendar" | "library" | "funders" | "clients" | "giving" | "reports" | "import" | "settings";
 
 export type Route =
   | { screen: ScreenId }
@@ -36,6 +37,7 @@ export type DrawerTarget =
   | { kind: "grant"; id: string }
   | { kind: "funder"; id: string }
   | { kind: "client"; id: string }
+  | { kind: "donor"; id: string }
   | { kind: "library"; id: string };
 
 interface Toast {
@@ -43,6 +45,22 @@ interface Toast {
   text: string;
   tone?: "ok" | "warn" | "error";
   action?: { label: string; run: () => void };
+}
+
+/** A running timer. Kept in local prefs so it survives a reload or restart. */
+export interface RunningTimer {
+  folder: string;
+  title: string;
+  start: number; // ms since epoch
+}
+
+function loadTimer(): RunningTimer | null {
+  try {
+    const t = JSON.parse(getPref("timer") ?? "null");
+    return t && typeof t.folder === "string" && typeof t.start === "number" ? t : null;
+  } catch {
+    return null;
+  }
 }
 
 interface State {
@@ -56,7 +74,12 @@ interface State {
   drawerExpanded: boolean;
   clientFilter: string; // "" = all clients
   toasts: Toast[];
+  timer: RunningTimer | null;
 
+  startTimer(folder: string): Promise<void>;
+  stopTimer(note?: string): Promise<void>;
+  discardTimer(): void;
+  logTime(folder: string, entry: TimeEntry): Promise<void>;
   openVault(path: string | null): Promise<void>;
   openDemo(reset?: boolean): Promise<void>;
   closeVault(): void;
@@ -78,6 +101,9 @@ interface State {
   saveFunder(f: Funder): Promise<void>;
   saveClient(c: Client): Promise<void>;
   addClient(name: string): Promise<string>;
+  saveDonor(d: Donor): Promise<void>;
+  addDonor(name: string): Promise<string>;
+  deleteDonor(slug: string): Promise<void>;
   saveLibrary(item: LibraryItem): Promise<void>;
   updateSettings(fn: (s: Settings) => Settings): Promise<void>;
   /** Run a function that writes files directly, then reload. */
@@ -187,6 +213,38 @@ export const useStore = create<State>((set, get) => {
     drawerExpanded: false,
     clientFilter: getPref("clientFilter") ?? "",
     toasts: [],
+    timer: loadTimer(),
+
+    async startTimer(folder) {
+      if (get().timer) await get().stopTimer();
+      const g = get().data?.grants.find((x) => x.folder === folder);
+      const timer = { folder, title: g?.fm.title ?? folder, start: Date.now() };
+      setPref("timer", JSON.stringify(timer));
+      set({ timer });
+    },
+    async stopTimer(note = "") {
+      const t = get().timer;
+      if (!t) return;
+      setPref("timer", null);
+      set({ timer: null });
+      const minutes = Math.max(1, Math.round((Date.now() - t.start) / 60000));
+      const grants = get().data?.grants ?? [];
+      // The folder is renamed when a title or deadline changes, so fall back to the title.
+      const g = grants.find((x) => x.folder === t.folder) ?? grants.find((x) => x.fm.title === t.title);
+      if (!g) {
+        get().toast(`Couldn't find "${t.title}" to log ${minutes} min`, "warn");
+        return;
+      }
+      await get().logTime(g.folder, { date: todayISO(new Date(t.start)), minutes, note });
+      get().toast(`Logged ${fmtMinutes(minutes)} on ${g.fm.title}`);
+    },
+    discardTimer() {
+      setPref("timer", null);
+      set({ timer: null });
+    },
+    async logTime(folder, entry) {
+      await get().updateGrant(folder, (g) => ({ ...g, fm: { ...g.fm, time_log: [...g.fm.time_log, entry] } }));
+    },
 
     async openVault(path) {
       if (!path) return;
@@ -345,6 +403,33 @@ export const useStore = create<State>((set, get) => {
       const r = await ensureClient(get().fs!, name);
       await get().reload();
       return r.slug;
+    },
+    async saveDonor(d) {
+      markWrite();
+      await writeDonor(get().fs!, d);
+      const data = get().data!;
+      set({ data: { ...data, donors: data.donors.map((x) => (x.slug === d.slug ? d : x)) } });
+    },
+    async addDonor(name) {
+      markWrite();
+      const slug = await createDonor(get().fs!, name);
+      await get().reload();
+      return slug;
+    },
+    async deleteDonor(slug) {
+      markWrite();
+      const fs = get().fs!;
+      const dest = await trash(fs, `donors/${slug}.md`);
+      if (get().drawer?.id === slug) set({ drawer: null });
+      await get().reload();
+      get().toast("Moved to trash", "ok", {
+        label: "Undo",
+        run: async () => {
+          markWrite();
+          await fs.rename(dest, `donors/${slug}.md`);
+          await get().reload();
+        },
+      });
     },
     async saveLibrary(item) {
       markWrite();

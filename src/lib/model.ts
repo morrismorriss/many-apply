@@ -55,6 +55,13 @@ export interface ReportDate {
   notes?: string | null;
 }
 
+/** Time spent working on an application, logged by the built-in timer or by hand. */
+export interface TimeEntry {
+  date: string;
+  minutes: number;
+  note: string;
+}
+
 export interface StatusEvent {
   status: Status;
   date: string;
@@ -85,6 +92,7 @@ export interface GrantFM {
   created: string;
   updated: string;
   status_history: StatusEvent[];
+  time_log: TimeEntry[];
   /** Any extra frontmatter keys (kept round-trip, e.g. from imports). */
   [extra: string]: unknown;
 }

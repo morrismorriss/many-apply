@@ -291,7 +291,10 @@ export async function runImport(
   rows: PreviewRow[],
   mapping: Mapping,
   fileName: string,
+  /** Original spreadsheet row numbers, when rows were removed before importing. */
+  rowNumbers?: number[],
 ): Promise<ImportLog> {
+  const rowNo = (i: number) => rowNumbers?.[i] ?? i + 2;
   const log: ImportLog = {
     id: new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19),
     file: fileName,
@@ -304,11 +307,11 @@ export async function runImport(
   };
   for (const r of rows) {
     if (r.error) {
-      log.skipped.push({ row: r.index + 2, reason: r.error, title: r.fm.title ?? "" });
+      log.skipped.push({ row: rowNo(r.index), reason: r.error, title: r.fm.title ?? "" });
       continue;
     }
     if (r.duplicateOf && mapping.duplicate === "skip") {
-      log.skipped.push({ row: r.index + 2, reason: "Duplicate", title: r.fm.title ?? "" });
+      log.skipped.push({ row: rowNo(r.index), reason: "Duplicate", title: r.fm.title ?? "" });
       continue;
     }
     if (r.funderName) {
