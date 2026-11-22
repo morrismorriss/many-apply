@@ -88,7 +88,7 @@ async fn fetch_feed(url: String) -> Result<String, String> {
     const MAX: usize = 5 * 1024 * 1024;
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(20))
-        .user_agent("ManyApply/0.2 (RSS reader)")
+        .user_agent("ManyApply/0.3 (RSS reader)")
         .build()
         .map_err(|e| e.to_string())?;
     let resp = client
