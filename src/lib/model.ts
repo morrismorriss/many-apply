@@ -219,6 +219,8 @@ export interface Settings {
   feeds: FeedSource[];
   /** Chart and status colours that override the theme's, keyed like "st-awarded" or "ev-report". */
   dataColors: Record<string, string>;
+  /** Report panels turned off on the Reports screen. */
+  hiddenReports: string[];
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -241,6 +243,7 @@ export const DEFAULT_SETTINGS: Settings = {
   pairingCode: "",
   feeds: DEFAULT_FEEDS.map((f) => ({ ...f })),
   dataColors: {},
+  hiddenReports: [],
 };
 
 export const ME = "me";

@@ -496,3 +496,55 @@ describe("CV builder", () => {
     expect(xml).not.toContain("Selected works");
   });
 });
+
+describe("new reports", () => {
+  it("year in review counts what was sent, decided and given that year", async () => {
+    const { yearReview, yearReviewText } = await import("../src/lib/reportStats");
+    const { normalizeDonor } = await import("../src/lib/donors");
+    const g = (raw: Record<string, unknown>) => ({ folder: String(raw.title), fm: normalizeGrantForTest(raw), body: "", lastEdited: 0 }) as never;
+    const grants = [
+      g({ title: "A", funder: "old", status: "awarded", submitted_on: "2025-02-01", decision_on: "2025-05-01", amount_requested: 5000, amount_awarded: 4000 }),
+      g({ title: "B", funder: "old", status: "declined", submitted_on: "2024-02-01", decision_on: "2024-05-01" }),
+      g({ title: "C", funder: "new", status: "submitted", submitted_on: "2025-09-01", amount_requested: 1000 }),
+      g({ title: "D", funder: "x", status: "researching", deadline: "2025-10-01" }),
+    ];
+    const donors = [normalizeDonor("pat", { name: "Pat", gifts: [{ date: "2025-03-01", amount: 100 }, { date: "2024-03-01", amount: 50 }] }, "")];
+    const r = yearReview(grants, donors, 2025);
+    expect(r).toMatchObject({ submitted: 2, requested: 6000, awarded: 1, awardedTotal: 4000, declined: 0, winRate: 1, pending: 1, newFunders: ["new"] });
+    expect(r.gifts).toEqual({ count: 1, total: 100, donors: 1 });
+    expect(yearReviewText(r, "Me", (s) => s.toUpperCase())).toContain("Top funders: OLD ($4,000)");
+  });
+
+  it("document readiness picks the best document per column", async () => {
+    const { documentReadiness } = await import("../src/lib/reportStats");
+    const { normalizeDocument } = await import("../src/lib/documents");
+    const docs = [
+      normalizeDocument({ title: "W-9", type: "W-9", expires: "2026-01-01" }, "me/w9-old.md", ""),
+      normalizeDocument({ title: "W-9 new", type: "W-9", expires: "2027-12-01" }, "me/w9.md", ""),
+      normalizeDocument({ title: "COI", type: "Insurance certificate", expires: "2026-12-01" }, "me/coi.md", ""),
+      normalizeDocument({ title: "FS", type: "Fiscal sponsor agreement" }, "lake/fs.md", ""),
+    ];
+    const clients = [{ slug: "me", fm: { name: "Me" } }, { slug: "lake", fm: { name: "Lake" } }] as never;
+    const [me, lake] = documentReadiness(clients, docs, new Date("2026-11-22"));
+    expect(me.cells.map((c) => c.state)).toEqual(["ok", "missing", "soon", "missing", "missing", "missing"]);
+    expect(me.cells[0].doc?.path).toBe("me/w9.md");
+    expect(lake.cells[1].state).toBe("ok");
+    expect(lake.ready).toBe(1);
+  });
+
+  it("giving report works out new, returning and retained donors", async () => {
+    const { givingReport } = await import("../src/lib/reportStats");
+    const { normalizeDonor } = await import("../src/lib/donors");
+    const donors = [
+      normalizeDonor("a", { name: "A", gifts: [{ date: "2025-01-01", amount: 100, method: "check" }, { date: "2026-02-01", amount: 300, method: "card", acknowledged: true }] }, ""),
+      normalizeDonor("b", { name: "B", gifts: [{ date: "2025-06-01", amount: 50 }] }, ""),
+      normalizeDonor("c", { name: "C", gifts: [{ date: "2026-03-01", amount: 25, method: "card" }] }, ""),
+    ];
+    const r = givingReport(donors, 2026, "2026-11-22");
+    expect(r).toMatchObject({ total: 325, donors: 2, newDonors: 1, returningDonors: 1, retention: 0.5, largestGift: 300 });
+    expect(r.topDonors[0]).toMatchObject({ name: "A", total: 300 });
+    expect(r.byMethod).toEqual([{ method: "card", total: 325, count: 2 }]);
+    expect(r.byYear.map((y) => y.total)).toEqual([0, 0, 0, 150, 325]);
+    expect(r.unthanked.count).toBe(3);
+  });
+});

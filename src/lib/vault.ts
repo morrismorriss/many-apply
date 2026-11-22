@@ -426,6 +426,7 @@ export async function loadSettings(fs: VaultFS): Promise<Settings> {
       todoist: { ...DEFAULT_SETTINGS.todoist, ...(raw.todoist ?? {}) },
       feeds: mergeFeeds(raw.feeds),
       dataColors: raw.dataColors && typeof raw.dataColors === "object" ? raw.dataColors : {},
+      hiddenReports: Array.isArray(raw.hiddenReports) ? raw.hiddenReports.filter((x: unknown) => typeof x === "string") : [],
     };
   } catch {
     return structuredClone(DEFAULT_SETTINGS);
