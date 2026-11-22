@@ -14,6 +14,8 @@ interface FeedState {
   seenAt: number;
   hidden: Set<string>;
   refresh(feeds: FeedSource[]): Promise<void>;
+  /** Forget loaded items, e.g. when another vault is opened. */
+  reset(): void;
   markSeen(): void;
   hide(id: string): void;
   unhideAll(): void;
@@ -63,6 +65,9 @@ export const useFeeds = create<FeedState>((set, get) => ({
       .filter((i) => (seen.has(i.feedId + i.id) ? false : (seen.add(i.feedId + i.id), true)))
       .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
     set({ items, errors, loading: false, loadedAt: Date.now() });
+  },
+  reset() {
+    set({ items: [], errors: {}, loadedAt: 0, demo: false });
   },
   markSeen() {
     const now = Date.now();

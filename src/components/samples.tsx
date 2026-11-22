@@ -16,7 +16,7 @@ const KIND_ICON: Record<WorkSample["fm"]["kind"], string> = {
  * A blob: URL for a vault file, for <img>, <video> and <audio>. The file is read only when `on` is true,
  * and the URL is released when the component goes away.
  */
-export function useBlobUrl(path: string, mime: string, on = true): { url: string | null; failed: boolean } {
+export function useBlobUrl(path: string, mime: string, on = true, version = 0): { url: string | null; failed: boolean } {
   const fs = useStore((s) => s.fs);
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
@@ -37,7 +37,7 @@ export function useBlobUrl(path: string, mime: string, on = true): { url: string
       live = false;
       if (made) URL.revokeObjectURL(made);
     };
-  }, [fs, path, mime, on]);
+  }, [fs, path, mime, on, version]);
   return { url, failed };
 }
 
@@ -54,10 +54,10 @@ export function SampleThumb({ s, size = 140 }: { s: WorkSample; size?: number })
 }
 
 /** Full preview in the drawer: image, video or audio player, or a note for files the app can't show. */
-export function SamplePreview({ s }: { s: WorkSample }) {
+export function SamplePreview({ s, version = 0 }: { s: WorkSample; version?: number }) {
   const file = sampleFilePath(s);
   const mime = file ? previewMime(s.fm.file) : "";
-  const { url, failed } = useBlobUrl(file, mime, !!mime);
+  const { url, failed } = useBlobUrl(file, mime, !!mime, version);
   if (!file) {
     return s.fm.url ? (
       <div className="sample-preview empty">
@@ -109,15 +109,18 @@ export function useAddSamples() {
 
   return {
     /** Upload a file to an existing sample, replacing any file it had. */
-    replace: async (sample: WorkSample) => {
+    /** Returns true if a file was added, so the caller can refresh its preview. */
+    replace: async (sample: WorkSample): Promise<boolean> => {
       const [f] = await pickFiles(SAMPLE_EXTENSIONS, sample.fm.file ? "Replace file" : "Upload a file");
-      if (!f) return;
+      if (!f) return false;
       try {
         const { trash } = await import("../lib/vault");
         await mutate((fs) => setSampleFile(fs, sample, { name: f.name, copyTo: (dest) => f.copyTo(fs, dest) }, (p) => trash(fs, p)));
         toast(sample.fm.file ? "Replaced the file. The old one is in trash." : "Uploaded");
+        return true;
       } catch (e) {
         toast(`Couldn't add that file: ${errorText(e)}`, "error");
+        return false;
       }
     },
     pick: async (folder: string) => addFiles(folder, await pickFiles(SAMPLE_EXTENSIONS, "Add work samples")),

@@ -37,6 +37,10 @@ export function Sidebar() {
   const feeds = useStore((s) => s.data?.settings.feeds);
   const newFeedItems = useNewFeedCount();
   const feedsOpen = drawer?.kind === "feeds";
+  // A different vault has its own feed list: forget the last one's items.
+  useEffect(() => {
+    useFeeds.getState().reset();
+  }, [root]);
   // Load feeds once per vault, a few seconds after it opens, so the badge can show new items.
   useEffect(() => {
     if (!feeds || useFeeds.getState().loadedAt || useFeeds.getState().loading) return;

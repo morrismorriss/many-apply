@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useStore } from "../store";
 import { InlineSelect, InlineText, MenuButton, TagInput } from "./ui";
 import { confirmAction } from "./dialogs";
@@ -28,6 +29,7 @@ export function SampleDrawer({ path }: { path: string }) {
   const close = useStore((st) => st.closeDrawer);
   const toast = useStore((st) => st.toast);
   const add = useAddSamples();
+  const [version, setVersion] = useState(0);
   if (!s) return <p className="muted">This work sample isn't in the vault any more.</p>;
   const allTags = [...new Set((samples ?? []).flatMap((x) => x.fm.tags))];
   const owner = path.split("/")[0];
@@ -43,7 +45,7 @@ export function SampleDrawer({ path }: { path: string }) {
       </div>
 
       <section>
-        <SamplePreview s={s} />
+        <SamplePreview s={s} version={version} />
         <div className="row wrap" style={{ marginTop: 8 }}>
           {file && fs && (
             <button
@@ -58,7 +60,7 @@ export function SampleDrawer({ path }: { path: string }) {
               Open link ↗
             </button>
           )}
-          <button className="btn small ghost" onClick={() => void add.replace(s)}>
+          <button className="btn small ghost" onClick={async () => (await add.replace(s)) && setVersion((v) => v + 1)}>
             {s.fm.file ? "Replace file…" : "Upload a file…"}
           </button>
           <span className="grow" />
