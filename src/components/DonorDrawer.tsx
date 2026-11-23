@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { useStore } from "../store";
-import { ClientSelect, InlineDate, InlineText, TagInput } from "./ui";
-import { confirmAction } from "./dialogs";
-import { DONOR_STAGES, DONOR_STAGE_LABEL, TOUCH_KINDS, looksLapsed, summarize, type Donor, type Gift, type Touch } from "../lib/donors";
+import { useLookups, useStore } from "../store";
+import { InlineDate, InlineText, TagInput } from "./ui";
+import { askText, confirmAction } from "./dialogs";
+import { DONOR_STAGES, DONOR_STAGE_LABEL, TOUCH_KINDS, giftTo, looksLapsed, summarize, type Donor, type Gift, type Touch } from "../lib/donors";
 import { fmtDate, fmtMoney, parseNumber, todayISO } from "../lib/util";
 import { StagePill } from "../screens/Giving";
 
@@ -49,7 +49,7 @@ export function DonorDrawer({ slug }: { slug: string }) {
         <h3>Contact</h3>
         <div className="props">
           <div className="k">Gave to</div>
-          <div className="v"><ClientSelect className="select inline" value={d.fm.client} onChange={(client) => set({ client })} /></div>
+          <div className="v"><GaveTo value={d.fm.gave_to} onChange={(gave_to) => set({ gave_to })} /></div>
           <div className="k">Email</div>
           <div className="v"><InlineText type="email" value={d.fm.email} placeholder="Empty" onSave={(email) => set({ email })} /></div>
           <div className="k">Phone</div>
@@ -93,6 +93,11 @@ function Gifts({ d, currency, onChange }: { d: Donor; currency: string; onChange
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState("");
   const [note, setNote] = useState("");
+  const clientFilter = useStore((s) => s.clientFilter);
+  const { clientName } = useLookups();
+  const many = d.fm.gave_to.length > 1 || d.fm.gifts.some((g) => g.to && g.to !== d.fm.gave_to[0]);
+  const defaultTo = d.fm.gave_to.includes(clientFilter) ? clientFilter : d.fm.gave_to[0];
+  const [to, setTo] = useState(defaultTo);
   const gifts = d.fm.gifts;
   const patch = (i: number, p: Partial<Gift>) => onChange(gifts.map((g, j) => (j === i ? { ...g, ...p } : g)));
   const amt = parseNumber(amount);
@@ -123,10 +128,20 @@ function Gifts({ d, currency, onChange }: { d: Donor; currency: string; onChange
               </datalist>
             </label>
           </div>
-          <label className="field">
-            Note (optional)
-            <input className="input" placeholder="For the spring production" value={note} onChange={(e) => setNote(e.target.value)} />
-          </label>
+          <div className="row">
+            {d.fm.gave_to.length > 1 && (
+              <label className="field">
+                For
+                <select className="select" value={to} onChange={(e) => setTo(e.target.value)}>
+                  {d.fm.gave_to.map((c) => <option key={c} value={c}>{clientName(c)}</option>)}
+                </select>
+              </label>
+            )}
+            <label className="field grow">
+              Note (optional)
+              <input className="input" placeholder="For the spring production" value={note} onChange={(e) => setNote(e.target.value)} />
+            </label>
+          </div>
           <div className="row">
             <span className="grow" />
             <button className="btn ghost" onClick={() => setAdding(false)}>Cancel</button>
@@ -134,7 +149,7 @@ function Gifts({ d, currency, onChange }: { d: Donor; currency: string; onChange
               className="btn primary"
               disabled={!amt || !date}
               onClick={() => {
-                const next = byDateDesc([...gifts, { date, amount: amt!, method: method.trim(), note: note.trim(), acknowledged: false }]);
+                const next = byDateDesc([...gifts, { date, amount: amt!, method: method.trim(), note: note.trim(), acknowledged: false, to: d.fm.gave_to.includes(to) ? to : d.fm.gave_to[0] }]);
                 const stage = d.fm.stage === "prospect" ? (gifts.length === 0 ? "first-time" : "active") : d.fm.stage === "first-time" || d.fm.stage === "lapsed" ? "active" : d.fm.stage;
                 onChange(next, stage !== d.fm.stage ? stage : undefined);
                 setAdding(false);
@@ -153,13 +168,20 @@ function Gifts({ d, currency, onChange }: { d: Donor; currency: string; onChange
       {gifts.length > 0 && (
         <table className="table small">
           <thead>
-            <tr><th>Date</th><th className="r">Amount</th><th>Method / note</th><th title="Thank-you sent">Thanked</th><th /></tr>
+            <tr><th>Date</th><th className="r">Amount</th>{many && <th>For</th>}<th>Method / note</th><th title="Thank-you sent">Thanked</th><th /></tr>
           </thead>
           <tbody>
             {gifts.map((g, i) => (
               <tr key={i}>
                 <td className="num" style={{ whiteSpace: "nowrap" }}>{fmtDate(g.date, { year: true })}</td>
                 <td className="r num">{fmtMoney(g.amount, currency)}</td>
+                {many && (
+                  <td>
+                    <select className="select inline" style={{ width: "auto", minWidth: 96, maxWidth: 150 }} aria-label="Gift was for" value={giftTo(d, g)} onChange={(e) => patch(i, { to: e.target.value })}>
+                      {[...new Set([...d.fm.gave_to, giftTo(d, g)])].map((c) => <option key={c} value={c}>{clientName(c)}</option>)}
+                    </select>
+                  </td>
+                )}
                 <td className="soft">{[g.method, g.note].filter(Boolean).join(" · ")}</td>
                 <td>
                   <label className="check">
@@ -224,5 +246,44 @@ function Touches({ d, onChange }: { d: Donor; onChange: (t: Touch[]) => void }) 
         ))}
       </div>
     </section>
+  );
+}
+
+/** Who a donor gives to: you and/or any clients. At least one is always kept. */
+function GaveTo({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+  const clients = useStore((s) => s.data?.clients ?? []);
+  const addClient = useStore((s) => s.addClient);
+  const { clientName } = useLookups();
+  const rest = clients.filter((c) => !value.includes(c.slug));
+  return (
+    <div className="row wrap" style={{ gap: 6, padding: "2px 0" }}>
+      {value.map((c) => (
+        <span key={c} className="tag" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+          {clientName(c)}
+          {value.length > 1 && (
+            <button className="icon-btn" style={{ width: 18, height: 18, fontSize: 12 }} title={`Remove ${clientName(c)}`} onClick={() => onChange(value.filter((x) => x !== c))}>
+              ×
+            </button>
+          )}
+        </span>
+      ))}
+      <select
+        className="select inline"
+        style={{ width: "auto" }}
+        aria-label="Add who they gave to"
+        value=""
+        onChange={async (e) => {
+          const v = e.target.value;
+          if (v === "__new") {
+            const name = await askText("New client", { placeholder: "Organization or person" });
+            if (name?.trim()) onChange([...value, await addClient(name.trim())]);
+          } else if (v) onChange([...value, v]);
+        }}
+      >
+        <option value="">+ Add…</option>
+        {rest.map((c) => <option key={c.slug} value={c.slug}>{c.fm.name}</option>)}
+        <option value="__new">+ New client…</option>
+      </select>
+    </div>
   );
 }

@@ -309,7 +309,7 @@ function YearInReview({ grants, client }: { grants: import("../lib/model").Grant
   const thisYear = new Date().getFullYear();
   const years = [...new Set([thisYear, ...grants.map(grantYear).filter((y): y is number => !!y)])].sort((a, b) => b - a);
   const [year, setYear] = useState(thisYear);
-  const r = yearReview(grants, donors, year);
+  const r = yearReview(grants, donors, year, client);
   const m = (n: number) => fmtMoney(n, currency, true);
   const who = client ? clientName(client) : "All clients";
   return (
@@ -379,7 +379,7 @@ function GivingPanel({ client }: { client: string }) {
   const go = useStore((s) => s.go);
   const thisYear = new Date().getFullYear();
   const [year, setYear] = useState(thisYear);
-  const r = givingReport(donors, year);
+  const r = givingReport(donors, year, undefined, client);
   const opts = themeChartOptions();
   const years = [...new Set([thisYear, ...donors.flatMap((d) => d.fm.gifts.map((g) => Number(g.date.slice(0, 4))).filter(Boolean))])].sort((a, b) => b - a);
   return (
