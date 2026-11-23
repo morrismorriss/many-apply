@@ -70,7 +70,7 @@ Many Apply/
     shared/
     me/
     lakeside-youth-theater/
-    budgets/              (budget templates, as CSV)
+    budgets/              (Library budgets, as CSV)
   samples/                (work samples: a .md file per sample, with its media file next to it)
     shared/
     me/
