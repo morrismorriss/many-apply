@@ -119,7 +119,7 @@ export function Giving() {
       <div className="stats">
         <Stat v={fmtMoney(totals.raised, currency, true)} k={`Raised in ${year}`} />
         <Stat v={String(totals.givers)} k={`Donors in ${year}`} />
-        <Stat v={totals.avg === null ? "—" : fmtMoney(totals.avg, currency, true)} k="Average gift" />
+        <Stat v={totals.avg === null ? "—" : fmtMoney(Math.round(totals.avg), currency, true)} k="Average gift" />
         <Stat v={String(totals.due)} k="Follow-ups due" onClick={() => setStage("followup")} />
         <Stat v={String(totals.unthanked)} k="Gifts to thank" onClick={() => setStage("unthanked")} />
       </div>

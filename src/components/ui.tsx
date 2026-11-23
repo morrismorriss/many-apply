@@ -172,16 +172,18 @@ export function MenuButton({ label, items, className = "btn", title }: {
       });
     };
     place();
-    const close = (e: Event) => {
-      // Scrolling inside the menu itself is fine; scrolling the page would leave it floating.
-      if (e.type === "scroll" && menuRef.current?.contains(e.target as Node)) return;
-      setOpen(false);
+    // Follow the button while the page or drawer scrolls; close only once it's scrolled out of sight.
+    const onScroll = (e: Event) => {
+      if (menuRef.current?.contains(e.target as Node)) return;
+      const btn = ref.current?.getBoundingClientRect();
+      if (!btn || btn.bottom < 0 || btn.top > window.innerHeight) setOpen(false);
+      else place();
     };
-    window.addEventListener("resize", close);
-    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", onScroll, true);
     return () => {
-      window.removeEventListener("resize", close);
-      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", onScroll, true);
     };
   }, [open, items.length]);
 
