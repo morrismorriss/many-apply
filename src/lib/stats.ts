@@ -1,5 +1,5 @@
 import { ACTIVE_STATUSES, DONE_STATUSES, isFor, type Funder, type Grant, type Status } from "./model";
-import { daysBetween, fromISO, toISO } from "./util";
+import { addDays, daysBetween, daysUntil, fromISO, toISO } from "./util";
 
 export function winRate(grants: Grant[]): number | null {
   const awarded = grants.filter((g) => g.fm.status === "awarded").length;
@@ -51,7 +51,7 @@ export function needsAttention(grants: Grant[], today = new Date()): Attention[]
   const now = today.getTime();
   for (const g of grants) {
     const f = g.fm;
-    const dd = f.deadline ? daysBetween(today, fromISO(f.deadline)!) : null;
+    const dd = f.deadline ? daysUntil(f.deadline, today) : null;
     if (dd !== null && dd >= 0 && dd <= 14 && !DONE_STATUSES.includes(f.status) && f.deadline_type !== "rolling") {
       out.push({ kind: "due", grant: g, days: dd, text: dd === 0 ? "Due today, not submitted" : `Due in ${dd} day${dd === 1 ? "" : "s"}, not submitted` });
     }
@@ -60,12 +60,15 @@ export function needsAttention(grants: Grant[], today = new Date()): Attention[]
       out.push({ kind: "stale", grant: g, days: d, text: `Drafting, no edits in ${d} days` });
     }
     if (f.status === "submitted" && f.decision_expected && !f.decision_on) {
-      const d = daysBetween(fromISO(f.decision_expected)!, today);
-      if (d > 0) out.push({ kind: "decision", grant: g, days: d, text: `Decision expected ${d} day${d === 1 ? "" : "s"} ago, no result logged` });
+      const expected = fromISO(f.decision_expected);
+      const d = expected ? daysBetween(expected, today) : null;
+      if (d !== null && d > 0) out.push({ kind: "decision", grant: g, days: d, text: `Decision expected ${d} day${d === 1 ? "" : "s"} ago, no result logged` });
     }
     f.reports.forEach((r, i) => {
       if (r.submitted_on || !r.due) return;
-      const d = daysBetween(today, fromISO(r.due) ?? today);
+      const due = fromISO(r.due);
+      if (!due) return;
+      const d = daysBetween(today, due);
       if (d <= 30) out.push({ kind: "report", grant: g, reportIndex: i, days: d, text: d < 0 ? `${r.title} overdue by ${-d} days` : `${r.title} due in ${d} days` });
     });
     if (f.status === "awarded" && f.reports.length === 0 && !f.no_reporting) {
@@ -111,14 +114,23 @@ export function calendarEvents(grants: Grant[]): CalEvent[] {
 function icsEscape(s: string) {
   return s.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
 }
+/** Fold at 75 UTF-8 octets per line, never splitting a character. */
 function fold(line: string) {
   const out: string[] = [];
-  let s = line;
-  while (s.length > 74) {
-    out.push(s.slice(0, 74));
-    s = " " + s.slice(74);
+  let cur = "";
+  let bytes = 0;
+  for (const ch of line) {
+    const n = new TextEncoder().encode(ch).length;
+    if (bytes + n > 74) {
+      out.push(cur);
+      cur = " " + ch;
+      bytes = 1 + n;
+    } else {
+      cur += ch;
+      bytes += n;
+    }
   }
-  out.push(s);
+  out.push(cur);
   return out.join("\r\n");
 }
 
@@ -132,20 +144,21 @@ export function toICS(events: CalEvent[], name = "Many Apply"): string {
     `X-WR-CALNAME:${icsEscape(name)}`,
   ];
   for (const e of events) {
-    const d = e.date.replace(/-/g, "");
-    const next = fromISO(e.date)!;
-    next.setDate(next.getDate() + 1);
+    const day = fromISO(e.date);
+    if (!day) continue;
+    const next = addDays(day, 1);
+    const d = toISO(day).replace(/-/g, "");
     const uidPart = `${e.grant.folder}-${e.kind}${e.reportIndex !== undefined ? "-" + e.reportIndex : ""}`;
     lines.push(
       "BEGIN:VEVENT",
-      `UID:${uidPart}@manyapply`,
+      `UID:${icsEscape(uidPart)}@manyapply`,
       `DTSTAMP:${stamp}`,
       `DTSTART;VALUE=DATE:${d}`,
       `DTEND;VALUE=DATE:${toISO(next).replace(/-/g, "")}`,
       fold(`SUMMARY:${icsEscape(e.title)}`),
       `CATEGORIES:${e.kind}`,
     );
-    if (e.grant.fm.url) lines.push(fold(`URL:${e.grant.fm.url}`));
+    if (e.grant.fm.url) lines.push(fold(`URL:${icsEscape(e.grant.fm.url)}`));
     lines.push("END:VEVENT");
   }
   lines.push("END:VCALENDAR");

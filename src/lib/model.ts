@@ -222,6 +222,8 @@ export interface Settings {
   };
   importPresets: ImportPreset[];
   keepIcsUpdated: boolean;
+  /** Whether the Chrome-extension listener runs. */
+  pairingEnabled: boolean;
   pairingCode: string;
   /** Opportunity feeds (RSS/Atom) shown in the sidebar panel. */
   feeds: FeedSource[];
@@ -248,6 +250,7 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   importPresets: [],
   keepIcsUpdated: true,
+  pairingEnabled: true,
   pairingCode: "",
   feeds: DEFAULT_FEEDS.map((f) => ({ ...f })),
   dataColors: {},

@@ -3,7 +3,7 @@
 // One markdown file per document in documents/<owner>/, with the file it describes next to it.
 // These are sensitive, so they're never included in "Share client folder".
 import { parseFrontmatter, stringifyFrontmatter } from "./frontmatter";
-import { basename, dirname, joinPath, type VaultFS } from "./fs/types";
+import { basename, dirname, isSafeRelPath, isSafeSegment, joinPath, safeFileName, type VaultFS } from "./fs/types";
 import { extOf } from "./samples";
 import { moveWithFile, renameGrantReferences } from "./move";
 import { asArray, daysUntil, slugify, str } from "./util";
@@ -54,7 +54,8 @@ export function documentOwner(d: { path: string }): string {
 }
 
 export function documentFilePath(d: VaultDocument): string {
-  return d.fm.file ? `documents/${joinPath(dirname(d.path), d.fm.file)}` : "";
+  const file = safeFileName(d.fm.file);
+  return file ? `documents/${joinPath(dirname(d.path), file)}` : "";
 }
 
 /** Guess a type from a file name: "W9 2026.pdf" → W-9. */
@@ -80,7 +81,7 @@ export function normalizeDocument(raw: Record<string, unknown>, path: string, bo
       ...raw,
       title: str(raw.title) || basename(path).replace(/\.md$/, "").replace(/-/g, " "),
       type: str(raw.type) || "Other",
-      file: str(raw.file).trim(),
+      file: safeFileName(str(raw.file)),
       issued: dateStr(raw.issued),
       expires: dateStr(raw.expires),
       tags: asArray(raw.tags),
@@ -95,6 +96,7 @@ export async function readDocument(fs: VaultFS, p: string): Promise<VaultDocumen
 }
 
 export async function writeDocument(fs: VaultFS, d: VaultDocument) {
+  if (!isSafeRelPath(d.path)) throw new Error("Refusing to write an unsafe document path");
   await fs.writeText(`documents/${d.path}`, stringifyFrontmatter(d.fm, d.body, DOC_ORDER));
 }
 
@@ -103,6 +105,7 @@ export async function createDocument(
   folder: string,
   n: { title: string; file?: { name: string; copyTo: (vaultPath: string) => Promise<void> } },
 ): Promise<VaultDocument> {
+  if (!isSafeSegment(folder)) throw new Error("Refusing to write an unsafe document folder");
   await fs.mkdir(`documents/${folder}`);
   const ext = n.file ? extOf(n.file.name) : "";
   const stem = slugify(n.title) || "document";
@@ -153,8 +156,9 @@ export async function moveDocument(fs: VaultFS, d: VaultDocument, owner: string)
 }
 
 export function documentPaths(d: VaultDocument): string[] {
+  const md = isSafeRelPath(d.path) ? `documents/${d.path}` : "";
   const f = documentFilePath(d);
-  return [`documents/${d.path}`, ...(f ? [f] : [])];
+  return [...(md ? [md] : []), ...(f ? [f] : [])];
 }
 
 export type ExpiryState = "expired" | "soon" | "ok" | "none";

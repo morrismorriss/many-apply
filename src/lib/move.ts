@@ -1,6 +1,6 @@
 // Moving things between folders (Me, a client, Shared) without breaking the applications that use them.
 import { parseFrontmatter, stringifyFrontmatter } from "./frontmatter";
-import { basename, dirname, joinPath, type VaultFS } from "./fs/types";
+import { basename, dirname, isSafeRelPath, isSafeSegment, joinPath, safeFileName, type VaultFS } from "./fs/types";
 import { asArray } from "./util";
 
 /** The grant fields that point at Library answers, work samples and documents. */
@@ -17,6 +17,8 @@ export async function moveWithFile(
   file: string,
   toFolder: string,
 ): Promise<{ path: string; file: string }> {
+  if (!isSafeRelPath(path) || !isSafeSegment(toFolder) || (file && !safeFileName(file)))
+    throw new Error("Refusing to move an unsafe path");
   const stem = basename(path).replace(/\.md$/, "");
   const extMatch = /\.([^.]+)$/.exec(file);
   const ext = extMatch ? extMatch[1] : "";

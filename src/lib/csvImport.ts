@@ -380,7 +380,8 @@ export async function listImports(fs: VaultFS): Promise<ImportLog[]> {
     if (e.isDir || !e.path.endsWith(".json")) continue;
     try {
       const log = JSON.parse(await fs.readText(e.path)) as ImportLog & { undone?: boolean };
-      if (!log.undone) logs.push(log);
+      // The same folder holds donor-import logs, which have a different shape.
+      if (!log.undone && Array.isArray(log.created) && Array.isArray(log.merged)) logs.push(log);
     } catch {
       /* ignore */
     }
@@ -390,10 +391,10 @@ export async function listImports(fs: VaultFS): Promise<ImportLog[]> {
 
 /** Undo an import: created items go to trash, merged files get their old text back. */
 export async function undoImport(fs: VaultFS, log: ImportLog) {
-  for (const f of log.created) if (await fs.exists(`grants/${f}`)) await trash(fs, `grants/${f}`);
-  for (const m of log.merged) await fs.writeText(`grants/${m.folder}/grant.md`, m.before);
-  for (const f of log.createdFunders) if (await fs.exists(`funders/${f}.md`)) await trash(fs, `funders/${f}.md`);
-  for (const c of log.createdClients) if (await fs.exists(`clients/${c}.md`)) await trash(fs, `clients/${c}.md`);
+  for (const f of log.created ?? []) if (await fs.exists(`grants/${f}`)) await trash(fs, `grants/${f}`);
+  for (const m of log.merged ?? []) await fs.writeText(`grants/${m.folder}/grant.md`, m.before);
+  for (const f of log.createdFunders ?? []) if (await fs.exists(`funders/${f}.md`)) await trash(fs, `funders/${f}.md`);
+  for (const c of log.createdClients ?? []) if (await fs.exists(`clients/${c}.md`)) await trash(fs, `clients/${c}.md`);
   await fs.writeText(`.manyapply/imports/${log.id}.json`, JSON.stringify({ ...log, undone: true }, null, 2));
 }
 

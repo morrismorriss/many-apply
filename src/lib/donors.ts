@@ -1,7 +1,7 @@
 // Individual giving: a small donor CRM. One markdown file per person in donors/,
 // with gifts and touchpoints kept in frontmatter so the files stay readable by hand.
 import { parseFrontmatter, stringifyFrontmatter } from "./frontmatter";
-import { basename, type VaultFS } from "./fs/types";
+import { basename, isSafeSegment, type VaultFS } from "./fs/types";
 import { asArray, parseNumber, slugify, str, todayISO } from "./util";
 import { ME } from "./model";
 
@@ -134,10 +134,13 @@ export function normalizeDonor(slug: string, data: Record<string, unknown>, body
 
 export async function readDonor(fs: VaultFS, p: string): Promise<Donor> {
   const { data, body } = parseFrontmatter(await fs.readText(p));
-  return normalizeDonor(basename(p).replace(/\.md$/, ""), data, body);
+  const slug = basename(p).replace(/\.md$/, "");
+  if (!isSafeSegment(slug)) throw new Error(`Unsafe donor file name: ${p}`);
+  return normalizeDonor(slug, data, body);
 }
 
 export async function writeDonor(fs: VaultFS, d: Donor) {
+  if (!isSafeSegment(d.slug)) throw new Error("Refusing to write an unsafe donor");
   await fs.mkdir("donors");
   // A gift's "to" is only written when it says something: when it differs from the donor's first "gave to".
   const gifts = d.fm.gifts.map(({ to, ...g }) => (to && to !== d.fm.gave_to[0] ? { ...g, to } : g));

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLookups, useStore } from "../store";
 import { createLibraryItem, parseQuestions, readDraft, recordUsedIn } from "../lib/vault";
+import { isSafeSegment, safeDraftPath } from "../lib/fs/types";
 import { itemsForClient, searchLibrary, suggestFor } from "../lib/library";
 import { debounce, fmtMoney, wordCount } from "../lib/util";
 import { Modal, WordMeter } from "../components/ui";
@@ -21,9 +22,10 @@ export function DraftEditor({ folder, draft }: { folder: string; draft: string }
   const [showLib, setShowLib] = useState(false);
   const [showFields, setShowFields] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
-  const path = `grants/${folder}/${draft}`;
+  const safeDraft = safeDraftPath(draft);
+  const path = safeDraft && isSafeSegment(folder) ? `grants/${folder}/${safeDraft}` : "";
 
-  const q = useMemo(() => (g ? parseQuestions(g.body).find((x) => x.draft === draft) : undefined), [g, draft]);
+  const q = useMemo(() => (g ? parseQuestions(g.body).find((x) => x.draft === safeDraft) : undefined), [g, safeDraft]);
 
   useEffect(() => {
     void readDraft(fs, folder, draft).then(setText);
@@ -32,6 +34,7 @@ export function DraftEditor({ folder, draft }: { folder: string; draft: string }
   const save = useMemo(
     () =>
       debounce(async (t: string) => {
+        if (!path) return;
         await fs.writeText(path, t);
         setSaved(true);
       }, 600),
@@ -43,12 +46,13 @@ export function DraftEditor({ folder, draft }: { folder: string; draft: string }
   latest.current = text;
   useEffect(
     () => () => {
-      if (latest.current !== null) void fs.writeText(path, latest.current).then(() => useStore.getState().reload());
+      if (path && latest.current !== null) void fs.writeText(path, latest.current).then(() => useStore.getState().reload());
     },
     [fs, path],
   );
 
   if (!g) return <div className="page"><p className="muted">This application isn't in the vault.</p></div>;
+  if (!path) return <div className="page"><p className="muted">This draft link points outside the application's drafts folder, so it can't be opened.</p></div>;
   const words = text ? wordCount(text) : 0;
   const chars = text ? text.trim().length : 0;
   const unit = q?.limitUnit ?? "words";

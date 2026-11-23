@@ -1,5 +1,5 @@
 import { parseFrontmatter, stringifyFrontmatter } from "./frontmatter";
-import { basename, dirname, joinPath, type VaultFS } from "./fs/types";
+import { basename, dirname, isSafeRelPath, isSafeSegment, joinPath, safeDraftPath, type VaultFS } from "./fs/types";
 import {
   DEADLINE_TYPES,
   DEFAULT_SETTINGS,
@@ -18,7 +18,8 @@ import {
   type Status,
   type StatusEvent,
 } from "./model";
-import { asArray, parseNumber, slugify, str, todayISO, wordCount } from "./util";
+import { asArray, fromISO, parseNumber, slugify, str, toISO, todayISO, wordCount } from "./util";
+import { PAIRING_KEY, getSecret, setSecret } from "./platform";
 import { readDonor, type Donor } from "./donors";
 import { readSample, type WorkSample } from "./samples";
 import { readDocument, type VaultDocument } from "./documents";
@@ -57,6 +58,13 @@ function dateStr(v: unknown): string {
   return str(v).trim();
 }
 
+/** Keep a real ISO date; drop anything the app can't safely render or put in a calendar. */
+function isoDate(v: unknown): string {
+  const s = dateStr(v);
+  const d = fromISO(s);
+  return d && toISO(d) === s.slice(0, 10) ? toISO(d) : "";
+}
+
 export function normalizeGrant(raw: Record<string, unknown>, folder: string): GrantFM {
   const status = STATUSES.includes(raw.status as Status) ? (raw.status as Status) : "researching";
   const type = GRANT_TYPES.includes(raw.type as never) ? (raw.type as GrantFM["type"]) : "grant";
@@ -68,8 +76,8 @@ export function normalizeGrant(raw: Record<string, unknown>, folder: string): Gr
         .filter((r) => r && typeof r === "object")
         .map((r) => ({
           title: str(r.title) || "Report",
-          due: dateStr(r.due),
-          submitted_on: dateStr(r.submitted_on) || null,
+          due: isoDate(r.due),
+          submitted_on: isoDate(r.submitted_on) || null,
           todoist_task_id: str(r.todoist_task_id) || null,
           notes: str(r.notes) || null,
         }))
@@ -77,8 +85,10 @@ export function normalizeGrant(raw: Record<string, unknown>, folder: string): Gr
   const history: StatusEvent[] = Array.isArray(raw.status_history)
     ? (raw.status_history as Record<string, unknown>[])
         .filter((h) => h && STATUSES.includes(h.status as Status))
-        .map((h) => ({ status: h.status as Status, date: dateStr(h.date) }))
+        .map((h) => ({ status: h.status as Status, date: isoDate(h.date) }))
+        .filter((h) => h.date)
     : [];
+  const created = isoDate(raw.created) || todayISO();
   // The main client comes first; "clients" lists anyone else it's for (older files only have "client").
   const listed = asArray(raw.clients).map(slugOrMe);
   const main = str(raw.client).trim() ? slugOrMe(raw.client) : listed[0] ?? ME;
@@ -97,27 +107,27 @@ export function normalizeGrant(raw: Record<string, unknown>, folder: string): Gr
     amount_awarded: parseNumber(raw.amount_awarded),
     max_award: parseNumber(raw.max_award),
     currency: str(raw.currency) || "USD",
-    deadline: dateStr(raw.deadline),
+    deadline: isoDate(raw.deadline),
     deadline_type: dtype,
     project: str(raw.project),
     location: str(raw.location),
     tags: asArray(raw.tags),
-    submitted_on: dateStr(raw.submitted_on),
-    decision_expected: dateStr(raw.decision_expected),
-    decision_on: dateStr(raw.decision_on),
+    submitted_on: isoDate(raw.submitted_on),
+    decision_expected: isoDate(raw.decision_expected),
+    decision_on: isoDate(raw.decision_on),
     todoist_task_ids: asArray(raw.todoist_task_ids),
     reports,
     no_reporting: raw.no_reporting === true || raw.no_reporting === "true",
     work_samples: asArray(raw.work_samples),
     library_items: asArray(raw.library_items),
     documents: asArray(raw.documents),
-    created: dateStr(raw.created) || todayISO(),
-    updated: dateStr(raw.updated) || todayISO(),
-    status_history: history.length ? history : [{ status, date: dateStr(raw.created) || todayISO() }],
+    created,
+    updated: isoDate(raw.updated) || todayISO(),
+    status_history: history.length ? history : [{ status, date: created }],
     time_log: Array.isArray(raw.time_log)
       ? (raw.time_log as Record<string, unknown>[])
           .filter((t) => t && typeof t === "object")
-          .map((t) => ({ date: dateStr(t.date), minutes: Math.max(0, Math.round(parseNumber(t.minutes) ?? 0)), note: str(t.note) }))
+          .map((t) => ({ date: isoDate(t.date), minutes: Math.max(0, Math.round(parseNumber(t.minutes) ?? 0)), note: str(t.note) }))
           .filter((t) => t.minutes > 0)
       : [],
   };
@@ -179,7 +189,7 @@ export function parseQuestions(body: string): Question[] {
       continue;
     }
     const d = /^\s*Draft:\s*(\S.*?)\s*$/i.exec(line);
-    if (d && cur) cur.draft = d[1].replace(/^\[.*?\]\((.*)\)$/, "$1");
+    if (d && cur) cur.draft = safeDraftPath(d[1].replace(/^\[.*?\]\((.*)\)$/, "$1")) || null;
   }
   return out;
 }
@@ -268,22 +278,23 @@ export async function loadVault(fs: VaultFS): Promise<VaultData> {
   const sampleFiles: string[] = [];
   const docFiles: string[] = [];
 
+  const slugOf = (file: string) => file.replace(/\.md$/, "");
   for (const e of entries) {
     const parts = e.path.split("/");
-    if (parts[0] === "grants" && parts.length >= 3) {
+    if (parts[0] === "grants" && parts.length >= 3 && isSafeSegment(parts[1])) {
       const folder = parts[1];
       const isText = /\.(md|csv)$/i.test(e.path);
       if (!e.isDir && isText) grantDirs.set(folder, Math.max(grantDirs.get(folder) ?? 0, e.mtime));
       else if (!grantDirs.has(folder)) grantDirs.set(folder, 0);
-    } else if (parts[0] === "funders" && parts.length === 2 && e.path.endsWith(".md")) {
+    } else if (parts[0] === "funders" && parts.length === 2 && e.path.endsWith(".md") && isSafeSegment(slugOf(parts[1]))) {
       funderFiles.push(e.path);
-    } else if (parts[0] === "clients" && parts.length === 2 && e.path.endsWith(".md")) {
+    } else if (parts[0] === "clients" && parts.length === 2 && e.path.endsWith(".md") && isSafeSegment(slugOf(parts[1]))) {
       clientFiles.push(e.path);
-    } else if (parts[0] === "donors" && parts.length === 2 && e.path.endsWith(".md")) {
+    } else if (parts[0] === "donors" && parts.length === 2 && e.path.endsWith(".md") && isSafeSegment(slugOf(parts[1]))) {
       donorFiles.push(e.path);
-    } else if (parts[0] === "samples" && parts.length >= 3 && !e.isDir && e.path.endsWith(".md")) {
+    } else if (parts[0] === "samples" && parts.length >= 3 && isSafeSegment(parts[1]) && !e.isDir && e.path.endsWith(".md")) {
       sampleFiles.push(e.path);
-    } else if (parts[0] === "documents" && parts.length >= 3 && !e.isDir && e.path.endsWith(".md")) {
+    } else if (parts[0] === "documents" && parts.length >= 3 && isSafeSegment(parts[1]) && !e.isDir && e.path.endsWith(".md")) {
       docFiles.push(e.path);
     } else if (parts[0] === "library" && parts.length >= 2) {
       const rel = parts.slice(1).join("/");
@@ -350,6 +361,7 @@ export async function loadVault(fs: VaultFS): Promise<VaultData> {
 async function readFunder(fs: VaultFS, p: string): Promise<Funder> {
   const { data, body } = parseFrontmatter(await fs.readText(p));
   const slug = basename(p).replace(/\.md$/, "");
+  if (!isSafeSegment(slug)) throw new Error(`Unsafe funder file name: ${p}`);
   return {
     slug,
     fm: {
@@ -398,6 +410,7 @@ function pickColor(seed: string) {
 async function readClient(fs: VaultFS, p: string): Promise<Client> {
   const { data, body } = parseFrontmatter(await fs.readText(p));
   const slug = basename(p).replace(/\.md$/, "");
+  if (!isSafeSegment(slug)) throw new Error(`Unsafe client file name: ${p}`);
   const base = blankClient(slug, str(data.name) || slug);
   return {
     slug,
@@ -433,22 +446,51 @@ async function readLibrary(fs: VaultFS, p: string): Promise<LibraryItem> {
 export async function loadSettings(fs: VaultFS): Promise<Settings> {
   try {
     const raw = JSON.parse(await fs.readText(".manyapply/settings.json"));
-    return {
+    const settings: Settings = {
       ...DEFAULT_SETTINGS,
       ...raw,
       customTheme: { ...DEFAULT_SETTINGS.customTheme, ...(raw.customTheme ?? {}) },
       todoist: { ...DEFAULT_SETTINGS.todoist, ...(raw.todoist ?? {}) },
+      pairingEnabled: raw.pairingEnabled !== false,
       feeds: mergeFeeds(raw.feeds),
       dataColors: raw.dataColors && typeof raw.dataColors === "object" ? raw.dataColors : {},
       hiddenReports: Array.isArray(raw.hiddenReports) ? raw.hiddenReports.filter((x: unknown) => typeof x === "string") : [],
     };
+    // Older vaults kept the pairing code in settings.json. Move it to the keychain and scrub the file.
+    const stored = typeof raw.pairingCode === "string" ? raw.pairingCode : "";
+    let secret: string | null = null;
+    try {
+      secret = await getSecret(PAIRING_KEY);
+    } catch {
+      /* keychain unavailable: fall back to the old value */
+    }
+    settings.pairingCode = secret || stored;
+    if (stored && !secret) {
+      try {
+        await setSecret(PAIRING_KEY, stored);
+        secret = stored;
+      } catch {
+        /* keep the plaintext copy until the keychain can take it */
+      }
+    }
+    if (stored && secret) {
+      try {
+        await saveSettings(fs, settings);
+      } catch {
+        /* read-only vault: it will be scrubbed on the next successful save */
+      }
+    }
+    return settings;
   } catch {
     return structuredClone(DEFAULT_SETTINGS);
   }
 }
 
+/** Settings are written to the vault, so the pairing code is deliberately left out (it lives in the keychain). */
 export async function saveSettings(fs: VaultFS, s: Settings) {
-  await fs.writeText(".manyapply/settings.json", JSON.stringify(s, null, 2) + "\n");
+  const { pairingCode, ...rest } = s;
+  void pairingCode;
+  await fs.writeText(".manyapply/settings.json", JSON.stringify(rest, null, 2) + "\n");
 }
 
 /** Create the vault skeleton in an empty (or existing) folder. Safe to run repeatedly. */
@@ -469,6 +511,7 @@ export async function initVault(fs: VaultFS) {
 // ------------------------------------------------------------------ write
 
 export async function writeGrant(fs: VaultFS, g: Grant): Promise<void> {
+  if (!isSafeSegment(g.folder)) throw new Error("Refusing to write an unsafe grant folder");
   const text = stringifyFrontmatter(grantToYaml(g.fm), g.body, GRANT_ORDER);
   await fs.writeText(`grants/${g.folder}/grant.md`, text);
 }
@@ -539,6 +582,7 @@ export function withStatus(fm: GrantFM, status: Status, date = todayISO()): Gran
 
 /** Nothing is hard-deleted: move into .manyapply/trash/. */
 export async function trash(fs: VaultFS, path: string): Promise<string> {
+  if (!isSafeRelPath(path)) throw new Error("Refusing to move an unsafe path to the trash");
   const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
   const dest = `.manyapply/trash/${stamp}__${path.replace(/\//g, "__")}`;
   await fs.rename(path, dest);
@@ -546,6 +590,7 @@ export async function trash(fs: VaultFS, path: string): Promise<string> {
 }
 
 export async function writeFunder(fs: VaultFS, f: Funder) {
+  if (!isSafeSegment(f.slug)) throw new Error("Refusing to write an unsafe funder");
   await fs.writeText(`funders/${f.slug}.md`, stringifyFrontmatter(f.fm, f.body, FUNDER_ORDER));
 }
 
@@ -561,6 +606,7 @@ export async function ensureFunder(fs: VaultFS, name: string): Promise<{ slug: s
 }
 
 export async function writeClient(fs: VaultFS, c: Client) {
+  if (!isSafeSegment(c.slug)) throw new Error("Refusing to write an unsafe client");
   await fs.writeText(`clients/${c.slug}.md`, stringifyFrontmatter(c.fm, c.body, CLIENT_ORDER));
   await fs.mkdir(`library/${c.slug}`);
 }
@@ -573,11 +619,13 @@ export async function ensureClient(fs: VaultFS, name: string): Promise<{ slug: s
 }
 
 export async function writeLibrary(fs: VaultFS, item: LibraryItem) {
+  if (!isSafeRelPath(item.path)) throw new Error("Refusing to write an unsafe library path");
   const fm = { ...item.fm, word_count: wordCount(item.body) };
   await fs.writeText(`library/${item.path}`, stringifyFrontmatter(fm, item.body, LIB_ORDER));
 }
 
 export async function createLibraryItem(fs: VaultFS, folder: string, title: string, body = "", tags: string[] = []) {
+  if (!isSafeRelPath(folder)) throw new Error("Refusing to write outside the library");
   let name = slugify(title);
   let i = 2;
   while (await fs.exists(`library/${joinPath(folder, name)}.md`)) name = `${slugify(title)}-${i++}`;
@@ -591,6 +639,7 @@ export async function createLibraryItem(fs: VaultFS, folder: string, title: stri
 }
 
 export async function moveLibraryItem(fs: VaultFS, path: string, toFolder: string): Promise<string> {
+  if (!isSafeRelPath(path) || !isSafeRelPath(toFolder)) throw new Error("Refusing to move outside the library");
   let dest = joinPath(toFolder, basename(path));
   let i = 2;
   while (await fs.exists(`library/${dest}`)) dest = joinPath(toFolder, basename(path).replace(/\.md$/, `-${i++}.md`));
@@ -616,8 +665,10 @@ export async function recordUsedIn(fs: VaultFS, item: LibraryItem, grantFolder: 
 }
 
 export async function readDraft(fs: VaultFS, folder: string, draft: string): Promise<string> {
+  const safe = safeDraftPath(draft);
+  if (!safe || !isSafeSegment(folder)) return "";
   try {
-    return await fs.readText(`grants/${folder}/${draft}`);
+    return await fs.readText(`grants/${folder}/${safe}`);
   } catch {
     return "";
   }

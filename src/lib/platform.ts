@@ -141,6 +141,8 @@ export function errorText(e: unknown): string {
 // ---- Secrets: OS keychain in the desktop app, never in the vault. ----
 
 const SECRET_FALLBACK = "manyapply.secret.";
+/** Keychain key for the extension pairing code. Never written to the vault. */
+export const PAIRING_KEY = "extension_pairing_code";
 
 export async function getSecret(key: string): Promise<string | null> {
   if (isTauri) {
