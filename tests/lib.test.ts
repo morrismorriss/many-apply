@@ -694,3 +694,14 @@ describe("CSV exports can't carry live spreadsheet formulas", () => {
     expect(lines[0]).toMatchObject({ line_item: "+1 (412) 555-0100 line", notes: "@note", amount: -50 });
   });
 });
+
+describe("Library budget names", () => {
+  it("keeps capitals in the file name and reads names back", async () => {
+    const { libraryBudgetFile, libraryBudgetName } = await import("../src/lib/budget");
+    expect(libraryBudgetFile("Made Men staged reading")).toBe("Made-Men-staged-reading.csv");
+    expect(libraryBudgetFile("  ../a/b: c?  ")).toBe("ab-c.csv");
+    expect(libraryBudgetFile("")).toBe("budget.csv");
+    expect(libraryBudgetName("Made-Men-staged-reading.csv")).toBe("Made Men staged reading");
+    expect(libraryBudgetName("staged-reading.csv")).toBe("Staged reading");
+  });
+});

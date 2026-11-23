@@ -33,7 +33,8 @@ export type ScreenId =
 export type Route =
   | { screen: ScreenId }
   | { screen: "draft"; folder: string; draft: string }
-  | { screen: "budget"; folder: string };
+  | { screen: "budget"; folder: string }
+  | { screen: "libraryBudget"; file: string };
 
 export type DrawerTarget =
   | { kind: "grant"; id: string }

@@ -169,3 +169,16 @@ export function budgetAsTable(lines: BudgetLine[]): { text: string; html: string
     `</table>`;
   return { text, html };
 }
+
+
+/** A file name for a Library budget that keeps the name's capitals: "Made Men reading" → "Made-Men-reading.csv". */
+export function libraryBudgetFile(name: string): string {
+  const stem = name.trim().replace(/[\\/:*?"<>|#%{}^~[\]`]+/g, "").replace(/\s+/g, "-").replace(/^[.-]+|[.-]+$/g, "").slice(0, 80);
+  return `${stem || "budget"}.csv`;
+}
+
+/** "staged-reading.csv" → "Staged reading"; "Made-Men-reading.csv" → "Made Men reading" */
+export function libraryBudgetName(file: string): string {
+  const s = file.replace(/\.csv$/i, "").replace(/[-_]+/g, " ").trim();
+  return s ? s[0].toUpperCase() + s.slice(1) : "Budget";
+}

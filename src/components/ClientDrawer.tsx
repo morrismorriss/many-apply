@@ -1,3 +1,4 @@
+import { libraryBudgetName } from "../lib/budget";
 import { useStore } from "../store";
 import { CLIENT_TYPES, ME, type Client } from "../lib/model";
 import { fmtMoney } from "../lib/util";
@@ -63,12 +64,12 @@ export function ClientDrawer({ slug }: { slug: string }) {
       <section>
         <h3>Defaults</h3>
         <div className="props">
-          <div className="k">Budget template</div>
+          <div className="k">Default budget</div>
           <div className="v">
             <select className="inline" value={client.fm.budget_template} onChange={(e) => set({ budget_template: e.target.value })}>
               <option value="">None</option>
               {templates.map((t) => (
-                <option key={t} value={t}>{t.replace(/\.csv$/, "").replace(/-/g, " ")}</option>
+                <option key={t} value={t}>{libraryBudgetName(t)}</option>
               ))}
             </select>
           </div>

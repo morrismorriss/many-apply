@@ -7,13 +7,20 @@ import { Empty, MenuButton, Tags } from "../components/ui";
 import { slugify } from "../lib/util";
 import { getPref, setPref } from "../lib/platform";
 import { SamplesView } from "./Samples";
+import { LibraryBudgets } from "./LibraryBudgets";
+import { Documents } from "./Documents";
 
-type Tab = "answers" | "samples";
+type Tab = "answers" | "samples" | "budgets" | "documents";
+const TABS: Tab[] = ["answers", "samples", "budgets", "documents"];
 
-export function Library() {
-  const [tab, setTabState] = useState<Tab>(getPref("libraryTab") === "samples" ? "samples" : "answers");
+export function Library({ initialTab }: { initialTab?: Tab } = {}) {
+  const saved = getPref("libraryTab") as Tab | null;
+  const [tab, setTabState] = useState<Tab>(initialTab ?? (saved && TABS.includes(saved) ? saved : "answers"));
   const answers = useStore((s) => s.data!.library.length);
   const samples = useStore((s) => s.data!.samples.length);
+  const budgets = useStore((s) => s.data!.budgetTemplates.length);
+  const clientFilter = useStore((s) => s.clientFilter);
+  const documents = useStore((s) => s.data!.documents.filter((d) => !clientFilter || d.path.split("/")[0] === clientFilter).length);
   const setTab = (t: Tab) => {
     setPref("libraryTab", t);
     setTabState(t);
@@ -26,9 +33,18 @@ export function Library() {
       <button role="tab" aria-selected={tab === "samples"} className={tab === "samples" ? "on" : ""} onClick={() => setTab("samples")}>
         Work samples <span className="muted num">{samples || ""}</span>
       </button>
+      <button role="tab" aria-selected={tab === "budgets"} className={tab === "budgets" ? "on" : ""} onClick={() => setTab("budgets")}>
+        Budgets <span className="muted num">{budgets || ""}</span>
+      </button>
+      <button role="tab" aria-selected={tab === "documents"} className={tab === "documents" ? "on" : ""} onClick={() => setTab("documents")}>
+        Documents <span className="muted num">{documents || ""}</span>
+      </button>
     </div>
   );
-  return tab === "samples" ? <SamplesView tabs={tabs} /> : <Answers tabs={tabs} />;
+  if (tab === "samples") return <SamplesView tabs={tabs} />;
+  if (tab === "budgets") return <LibraryBudgets tabs={tabs} />;
+  if (tab === "documents") return <Documents tabs={tabs} />;
+  return <Answers tabs={tabs} />;
 }
 
 function Answers({ tabs }: { tabs: React.ReactNode }) {

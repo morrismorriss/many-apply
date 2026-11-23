@@ -8,7 +8,6 @@ import { Dashboard } from "./screens/Dashboard";
 import { Research } from "./screens/Research";
 import { Pipeline } from "./screens/Pipeline";
 import { CalendarScreen } from "./screens/Calendar";
-import { Documents } from "./screens/Documents";
 import { Library } from "./screens/Library";
 import { Funders } from "./screens/Funders";
 import { Clients } from "./screens/Clients";
@@ -102,7 +101,8 @@ export default function App() {
     case "calendar": screen = <CalendarScreen />; break;
     case "library": screen = <Library />; break;
     case "cv": screen = <CvBuilder />; break;
-    case "documents": screen = <Documents />; break;
+    case "documents": screen = <Library key="documents" initialTab="documents" />; break;
+    case "libraryBudget": screen = <BudgetBuilder key={route.file} file={route.file} />; break;
     case "funders": screen = <Funders />; break;
     case "clients": screen = <Clients />; break;
     case "giving": screen = <Giving />; break;
