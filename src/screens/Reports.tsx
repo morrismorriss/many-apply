@@ -12,6 +12,7 @@ import {
   winRateBy,
 } from "../lib/stats";
 import { exportGrantsCsv } from "../lib/csvImport";
+import { donorsFor } from "../lib/donors";
 import { copyToClipboard, saveFile } from "../lib/platform";
 import {
   READINESS_COLUMNS,
@@ -278,7 +279,7 @@ export function Reports() {
             </div>
           )}
         </ReportPanel>}
-        {show("giving") && <GivingPanel />}
+        {show("giving") && <GivingPanel client={client} />}
         {show("documents") && <ReadinessPanel client={client} />}
       </div>
       {shownCount === 0 && (
@@ -301,7 +302,7 @@ function Big({ v, k, onClick }: { v: string; k: string; onClick?: () => void }) 
 }
 
 function YearInReview({ grants, client }: { grants: import("../lib/model").Grant[]; client: string }) {
-  const donors = useStore((s) => s.data!.donors);
+  const donors = donorsFor(useStore((s) => s.data!.donors), client);
   const currency = useStore((s) => s.data!.settings.currency);
   const toast = useStore((s) => s.toast);
   const { funderName, clientName } = useLookups();
@@ -361,7 +362,6 @@ function YearInReview({ grants, client }: { grants: import("../lib/model").Grant
             <li>{r.reportsDue} funder report{r.reportsDue === 1 ? "" : "s"} due</li>
             <li>
               {r.gifts.count ? `${fmtMoney(r.gifts.total, currency)} in individual gifts from ${r.gifts.donors} donor${r.gifts.donors === 1 ? "" : "s"}` : "No individual gifts logged"}
-              {client && r.gifts.count ? <span className="muted"> (all donors)</span> : null}
             </li>
           </ul>
         </div>
@@ -370,8 +370,9 @@ function YearInReview({ grants, client }: { grants: import("../lib/model").Grant
   );
 }
 
-function GivingPanel() {
-  const donors = useStore((s) => s.data!.donors);
+function GivingPanel({ client }: { client: string }) {
+  const { clientName } = useLookups();
+  const donors = donorsFor(useStore((s) => s.data!.donors), client);
   const currency = useStore((s) => s.data!.settings.currency);
   const dataColors = useStore((s) => s.data!.settings.dataColors);
   const open = useStore((s) => s.openDrawer);
@@ -385,7 +386,7 @@ function GivingPanel() {
     <ReportPanel
       id="giving"
       wide
-      title="Individual giving"
+      title={<>Individual giving <span className="muted small" style={{ fontWeight: 400 }}>· {client ? clientName(client) : "All clients"}</span></>}
       actions={
         <select className="select" aria-label="Year" style={{ width: "auto" }} value={year} onChange={(e) => setYear(Number(e.target.value))}>
           {years.map((y) => <option key={y} value={y}>{y}</option>)}
@@ -394,7 +395,7 @@ function GivingPanel() {
     >
       {donors.length === 0 ? (
         <p className="muted">
-          No donors yet. <a href="#" onClick={(e) => { e.preventDefault(); go({ screen: "giving" }); }}>Add or import donors →</a>
+          {client ? `No donors for ${clientName(client)} yet.` : "No donors yet."} <a href="#" onClick={(e) => { e.preventDefault(); go({ screen: "giving" }); }}>Add or import donors →</a>
         </p>
       ) : (
         <>

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
-import { useStore } from "../store";
+import { useLookups, useStore } from "../store";
 import { askText } from "../components/dialogs";
-import { Modal } from "../components/ui";
+import { ClientSelect, Modal } from "../components/ui";
 import { readCsv, type ParsedCsv } from "../lib/csvImport";
 import {
   DONOR_FIELDS,
@@ -14,7 +14,8 @@ import {
 } from "../lib/donorImport";
 import type { DateOrder } from "../lib/extract";
 import { errorText, pickFile } from "../lib/platform";
-import { DONOR_STAGES, DONOR_STAGE_LABEL, looksLapsed, summarize, type DonorStage } from "../lib/donors";
+import { DONOR_STAGES, DONOR_STAGE_LABEL, donorsFor, looksLapsed, summarize, type DonorStage } from "../lib/donors";
+import { ME } from "../lib/model";
 import { fmtDate, fmtMoney, todayISO } from "../lib/util";
 
 const STAGE_SHADE: Record<DonorStage, string> = {
@@ -36,7 +37,12 @@ export function StagePill({ stage }: { stage: DonorStage }) {
 type Sort = "name" | "lifetime" | "last" | "followup";
 
 export function Giving() {
-  const donors = useStore((s) => s.data!.donors);
+  const allDonors = useStore((s) => s.data!.donors);
+  const clientFilter = useStore((s) => s.clientFilter);
+  const clients = useStore((s) => s.data!.clients);
+  const { clientName } = useLookups();
+  const donors = useMemo(() => donorsFor(allDonors, clientFilter), [allDonors, clientFilter]);
+  const showGaveTo = !clientFilter && clients.length > 1;
   const currency = useStore((s) => s.data!.settings.currency);
   const open = useStore((s) => s.openDrawer);
   const addDonor = useStore((s) => s.addDonor);
@@ -85,7 +91,7 @@ export function Giving() {
 
   const add = async () => {
     const name = await askText("New donor", { placeholder: "Full name" });
-    if (name?.trim()) open({ kind: "donor", id: await addDonor(name.trim()) });
+    if (name?.trim()) open({ kind: "donor", id: await addDonor(name.trim(), clientFilter || ME) });
   };
 
   const importCsv = async () => {
@@ -101,7 +107,7 @@ export function Giving() {
 
   return (
     <div className="page wide">
-      {csv && <DonorImportDialog csv={csv} onClose={() => setCsv(null)} />}
+      {csv && <DonorImportDialog csv={csv} initialClient={clientFilter || ME} onClose={() => setCsv(null)} />}
       <div className="page-head">
         <div>
           <h1>Individual Giving</h1>
@@ -126,7 +132,7 @@ export function Giving() {
 
       {donors.length === 0 ? (
         <div className="panel" style={{ textAlign: "center", padding: 40 }}>
-          <h2>No donors yet</h2>
+          <h2>{clientFilter ? `No donors for ${clientName(clientFilter)} yet` : "No donors yet"}</h2>
           <p className="soft">Add the people who've supported you, log their gifts, and set a date to check in again.</p>
           <div className="row" style={{ justifyContent: "center" }}>
             <button className="btn primary" onClick={add}>+ Add your first donor</button>
@@ -157,6 +163,7 @@ export function Giving() {
               <thead>
                 <tr>
                   <th>Name</th>
+                  {showGaveTo && <th>Gave to</th>}
                   <th>Stage</th>
                   <th className="r">This year</th>
                   <th className="r">Lifetime</th>
@@ -173,6 +180,7 @@ export function Giving() {
                         <div style={{ fontWeight: 550 }}>{d.fm.name}</div>
                         {(d.fm.organization || d.fm.email) && <div className="muted small">{d.fm.organization || d.fm.email}</div>}
                       </td>
+                      {showGaveTo && <td className="soft small">{clientName(d.fm.client)}</td>}
                       <td>
                         <StagePill stage={d.fm.stage} />
                         {d.fm.stage !== "lapsed" && looksLapsed(d, today) && <span className="muted small"> · no gift in 18 mo</span>}
@@ -220,15 +228,22 @@ function Stat({ v, k, onClick }: { v: string; k: string; onClick?: () => void })
   );
 }
 
-function DonorImportDialog({ csv, onClose }: { csv: ParsedCsv & { name: string }; onClose: () => void }) {
+function DonorImportDialog({ csv, initialClient, onClose }: { csv: ParsedCsv & { name: string }; initialClient: string; onClose: () => void }) {
   const donors = useStore((s) => s.data!.donors);
+  const clients = useStore((s) => s.data!.clients);
+  const { clientName } = useLookups();
+  const [client, setClient] = useState(initialClient);
   const currency = useStore((s) => s.data!.settings.currency);
   const mutate = useStore((s) => s.mutate);
   const toast = useStore((s) => s.toast);
   const [mapping, setMapping] = useState(() => autoDonorMapping(csv.headers));
   const [dateOrder, setDateOrder] = useState<DateOrder>("us");
   const [busy, setBusy] = useState(false);
-  const plan = useMemo(() => planDonorImport(donors, csv.rows, { mapping, dateOrder }), [donors, csv, mapping, dateOrder]);
+  const clientList = useMemo(() => clients.map((c) => ({ slug: c.slug, name: c.fm.name })), [clients]);
+  const plan = useMemo(
+    () => planDonorImport(donors, csv.rows, { mapping, dateOrder, client, clients: clientList }),
+    [donors, csv, mapping, dateOrder, client, clientList],
+  );
   const ambiguous = useMemo(() => donorDatesAmbiguous(csv.rows, mapping), [csv, mapping]);
   const mapped = new Set(Object.values(mapping));
   const hasPerson = mapped.has("name") || mapped.has("email") || mapped.has("first_name") || mapped.has("last_name");
@@ -264,9 +279,14 @@ function DonorImportDialog({ csv, onClose }: { csv: ParsedCsv & { name: string }
         </>
       }
     >
+      <div className="row" style={{ marginBottom: 10 }}>
+        <span className="soft">These donors gave to</span>
+        <ClientSelect className="select" style={{ width: "auto", maxWidth: 260 }} value={client} onChange={setClient} />
+      </div>
       <p className="soft small" style={{ marginTop: 0 }}>
-        One row can be a person, a gift, or both. Rows with the same email (or the same name, if there's no email) are merged, and so are donors
-        you already have. Details you've already filled in are never overwritten.
+        One row can be a person, a gift, or both. Rows with the same email (or the same name, if there's no email) are merged, and so are
+        {" "}{clientName(client)}'s donors you already have. Details you've already filled in are never overwritten. A "Gave to" column, if your
+        file has one, sends each row to the client it names.
       </p>
       <div className="table-wrap" style={{ maxHeight: 320, overflow: "auto" }}>
         <table className="table">

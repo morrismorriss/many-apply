@@ -548,3 +548,36 @@ describe("new reports", () => {
     expect(r.unthanked.count).toBe(3);
   });
 });
+
+describe("donors by client", () => {
+  it("keeps who a donor gave to, defaulting to me", async () => {
+    const { normalizeDonor, donorsFor } = await import("../src/lib/donors");
+    const a = normalizeDonor("a", { name: "A" }, "");
+    const b = normalizeDonor("b", { name: "B", client: "lakeside" }, "");
+    expect(a.fm.client).toBe("me");
+    expect(donorsFor([a, b], "lakeside").map((d) => d.slug)).toEqual(["b"]);
+    expect(donorsFor([a, b], "")).toHaveLength(2);
+  });
+
+  it("imports to the chosen client and only merges with that client's donors", async () => {
+    const { autoDonorMapping, planDonorImport } = await import("../src/lib/donorImport");
+    const { normalizeDonor } = await import("../src/lib/donors");
+    const mine = normalizeDonor("jamie-rivera", { name: "Jamie Rivera", email: "jamie@example.org" }, "");
+    const { headers, rows } = readCsv(`Name,Email,Amount,Date,Gave to\nJamie Rivera,jamie@example.org,50,2026-06-01,\nSam Lee,sam@example.org,20,2026-06-02,Me\nPat Kim,pat@example.org,10,2026-06-03,Unknown Org\n`);
+    const mapping = autoDonorMapping(headers);
+    expect(mapping["Gave to"]).toBe("client");
+    const clients = [{ slug: "me", name: "Me" }, { slug: "lakeside", name: "Lakeside Youth Theater" }];
+    const plan = planDonorImport([mine], rows, { mapping, dateOrder: "us", client: "lakeside", clients });
+    const by = (name: string) => plan.entries.find((e) => e.donor.fm.name === name)!;
+    // Jamie gave to Lakeside this time: a separate donor file, not merged into Jamie-who-gave-to-me.
+    expect(by("Jamie Rivera").isNew).toBe(true);
+    expect(by("Jamie Rivera").donor.fm.client).toBe("lakeside");
+    expect(by("Jamie Rivera").donor.slug).toBe("jamie-rivera-2");
+    // The column names a client: it wins. An unknown name falls back to the chosen client.
+    expect(by("Sam Lee").donor.fm.client).toBe("me");
+    expect(by("Pat Kim").donor.fm.client).toBe("lakeside");
+    // Importing the same file to "me" merges Jamie into the existing donor.
+    const again = planDonorImport([mine], rows.slice(0, 1), { mapping, dateOrder: "us", client: "me", clients });
+    expect(again.entries[0]).toMatchObject({ isNew: false, giftsAdded: 1 });
+  });
+});

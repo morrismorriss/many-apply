@@ -7,6 +7,7 @@ import { stringifyFrontmatter } from "./frontmatter";
 import type { VaultFS } from "./fs/types";
 import { blankDonor, writeDonor, DONOR_STAGES, type Donor, type DonorStage, type Gift } from "./donors";
 import { parseNumber, slugify, todayISO } from "./util";
+import { ME } from "./model";
 import { trash } from "./vault";
 
 export interface DonorField {
@@ -24,6 +25,7 @@ export const DONOR_FIELDS: DonorField[] = [
   { key: "address", label: "Address", hint: "Several columns are joined: street, city, state, zip" },
   { key: "organization", label: "Organization", hint: "Employer or company" },
   { key: "stage", label: "Stage", hint: "prospect, first-time, active, major, lapsed" },
+  { key: "client", label: "Gave to (client)", hint: "A client's name; other rows use the client you import to" },
   { key: "tags", label: "Tags", hint: "Comma- or semicolon-separated" },
   { key: "notes", label: "Notes", hint: "Added to the donor's notes" },
   { key: "gift_date", label: "Gift date", hint: "Any common date format" },
@@ -44,6 +46,7 @@ const GUESSES: [RegExp, string][] = [
   [/^(address|street|street address|address 1|address line 1|address 2|address line 2|city|town|state|province|region|zip|zip code|postal code|postcode|country|mailing address)$/, "address"],
   [/^(organi[sz]ation|company|employer|business|business name)$/, "organization"],
   [/^(stage|donor stage|donor type|level)$/, "stage"],
+  [/^(client|gave to|recipient|beneficiary|organi[sz]ation supported|for)$/, "client"],
   [/^(tags?|labels?|groups?|segments?|lists?)$/, "tags"],
   [/^(notes?|comments?|donor notes?)$/, "notes"],
   [/^(date|gift date|donation date|transaction date|payment date|created|created at|created date|date received|received)$/, "gift_date"],
@@ -76,6 +79,10 @@ export function autoDonorMapping(headers: string[]): Record<string, string> {
 export interface DonorImportOptions {
   mapping: Record<string, string>;
   dateOrder: DateOrder;
+  /** Who these donors gave to: "me" or a client's slug. A "Gave to" column overrides it row by row. */
+  client?: string;
+  /** Clients a "Gave to" column can name, matched by name or slug. */
+  clients?: { slug: string; name: string }[];
 }
 
 export interface DonorPlanEntry {
@@ -107,7 +114,9 @@ function cells(row: Record<string, string>, mapping: Record<string, string>, key
     .filter(Boolean);
 }
 
-const keyFor = (email: string, name: string) => (email ? `e:${email.toLowerCase()}` : `n:${name.trim().toLowerCase().replace(/\s+/g, " ")}`);
+// A person is matched within one client: someone who gives to two clients has a donor file for each.
+const keyFor = (client: string, email: string, name: string) =>
+  `${client}|` + (email ? `e:${email.toLowerCase()}` : `n:${name.trim().toLowerCase().replace(/\s+/g, " ")}`);
 
 /** Whether any mapped date column holds a date like 3/4/2026 that reads differently day-first. */
 export function donorDatesAmbiguous(rows: Record<string, string>[], mapping: Record<string, string>): boolean {
@@ -117,12 +126,19 @@ export function donorDatesAmbiguous(rows: Record<string, string>[], mapping: Rec
 /** Work out what an import would do, without writing anything. */
 export function planDonorImport(existing: Donor[], rows: Record<string, string>[], opts: DonorImportOptions): DonorPlan {
   const { mapping, dateOrder } = opts;
+  const target = opts.client || ME;
+  const norm = (x: string) => x.trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const clientFor = (raw: string) => {
+    if (!raw.trim()) return target;
+    const c = (opts.clients ?? []).find((c) => norm(c.name) === norm(raw) || c.slug === raw.trim().toLowerCase());
+    return c ? c.slug : target;
+  };
   const byKey = new Map<string, DonorPlanEntry>();
   const taken = new Set(existing.map((d) => d.slug));
   for (const d of existing) {
     const entry = { donor: structuredClone(d), isNew: false, giftsAdded: 0 };
-    if (d.fm.email) byKey.set(keyFor(d.fm.email, ""), entry);
-    if (!byKey.has(keyFor("", d.fm.name))) byKey.set(keyFor("", d.fm.name), entry);
+    if (d.fm.email) byKey.set(keyFor(d.fm.client, d.fm.email, ""), entry);
+    if (!byKey.has(keyFor(d.fm.client, "", d.fm.name))) byKey.set(keyFor(d.fm.client, "", d.fm.name), entry);
   }
   const touched = new Set<DonorPlanEntry>();
   let duplicateGifts = 0;
@@ -139,18 +155,19 @@ export function planDonorImport(existing: Donor[], rows: Record<string, string>[
       skippedRows++;
       return;
     }
-    let entry = (email && byKey.get(keyFor(email, ""))) || (name && byKey.get(keyFor("", name))) || undefined;
+    const client = clientFor(one("client"));
+    let entry = (email && byKey.get(keyFor(client, email, ""))) || (name && byKey.get(keyFor(client, "", name))) || undefined;
     if (!entry) {
       const base = slugify(name || email.split("@")[0]) || "donor";
       let slug = base;
       for (let n = 2; taken.has(slug); n++) slug = `${base}-${n}`;
       taken.add(slug);
-      const d = blankDonor(slug, name || email);
+      const d = blankDonor(slug, name || email, client);
       d.fm.created = todayISO();
       entry = { donor: d, isNew: true, giftsAdded: 0 };
     }
-    if (email) byKey.set(keyFor(email, ""), entry);
-    if (name && !byKey.has(keyFor("", name))) byKey.set(keyFor("", name), entry);
+    if (email) byKey.set(keyFor(client, email, ""), entry);
+    if (name && !byKey.has(keyFor(client, "", name))) byKey.set(keyFor(client, "", name), entry);
     touched.add(entry);
     const fm = entry.donor.fm;
 
