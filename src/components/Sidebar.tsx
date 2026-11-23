@@ -43,12 +43,8 @@ export function Sidebar() {
     research: grants.filter((g) => g.fm.status === "researching").length,
     pipeline: grants.filter((g) => ["planning", "drafting", "submitted"].includes(g.fm.status)).length,
   };
-  const drawer = useStore((s) => s.drawer);
-  const openDrawer = useStore((s) => s.openDrawer);
-  const closeDrawer = useStore((s) => s.closeDrawer);
   const feeds = useStore((s) => s.data?.settings.feeds);
   const newFeedItems = useNewFeedCount();
-  const feedsOpen = drawer?.kind === "feeds";
   // A different vault has its own feed list: forget the last one's items.
   useEffect(() => {
     useFeeds.getState().reset();
@@ -96,10 +92,9 @@ export function Sidebar() {
         </button>
       ))}
       <button
-        className={`nav-item${feedsOpen ? " active" : ""}`}
-        aria-expanded={feedsOpen}
+        className={`nav-item${current === "feeds" ? " active" : ""}`}
         title="New grants and open calls from RSS feeds"
-        onClick={() => (feedsOpen ? closeDrawer() : openDrawer({ kind: "feeds", id: "all" }))}
+        onClick={() => go({ screen: "feeds" })}
       >
         <span className="icon" aria-hidden>
           ◉

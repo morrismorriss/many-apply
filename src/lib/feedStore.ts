@@ -1,6 +1,11 @@
 // Feed items live in memory only: they're fetched when a vault opens and when you press Refresh.
+// To keep things light, stale items (old, or past their deadline) are dropped on every refresh, the
+// list is capped, and the "hidden" list forgets items that are no longer in any feed.
 import { create } from "zustand";
-import { parseFeed, type FeedItem, type FeedSource } from "./feeds";
+import { isStaleFeedItem, parseFeed, type FeedItem, type FeedSource } from "./feeds";
+
+/** At most this many items are kept in memory. */
+const MAX_ITEMS = 300;
 import { errorText, fetchFeedText, getPref, isTauri, setPref } from "./platform";
 
 interface FeedState {
@@ -60,11 +65,18 @@ export const useFeeds = create<FeedState>((set, get) => ({
       }),
     );
     const seen = new Set<string>();
+    const now = new Date();
     const items = results
       .flat()
       .filter((i) => (seen.has(i.feedId + i.id) ? false : (seen.add(i.feedId + i.id), true)))
-      .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-    set({ items, errors, loading: false, loadedAt: Date.now() });
+      .filter((i) => !isStaleFeedItem(i, now))
+      .sort((a, b) => (b.date || "").localeCompare(a.date || ""))
+      .slice(0, MAX_ITEMS);
+    // Hidden items that have dropped out of every feed don't need remembering.
+    const ids = new Set(items.map((i) => i.id));
+    const hidden = new Set([...get().hidden].filter((id) => ids.has(id)));
+    if (hidden.size !== get().hidden.size) setPref("feedHidden", JSON.stringify([...hidden]));
+    set({ items, errors, loading: false, loadedAt: Date.now(), hidden });
   },
   reset() {
     set({ items: [], errors: {}, loadedAt: 0, demo: false });
@@ -91,7 +103,7 @@ function demoFeedItems(): FeedItem[] {
   const soon = (days: number) => new Date(Date.now() + days * 86400000).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
   return [
     { id: "demo-1", feedId: "nycplaywrights", title: "Call for Submissions: Ten-Minute Play Festival", link: "https://example.org/ten-minute", date: ago(1), summary: `Seeking ten-minute plays for a spring festival. No submission fee. Deadline ${soon(30)}. Honorarium $250.`, categories: [] },
-    { id: "demo-2", feedId: "artdeadline", title: "Emerging Artist Project Grants", link: "https://example.org/emerging", date: ago(2), summary: `Grants of up to $5,000 for individual artists in any discipline. Applications due ${soon(45)}.`, categories: ["Grants"] },
+    { id: "demo-2", feedId: "artdeadline", title: "Emerging Artist Project Grants", link: "https://example.org/emerging", date: ago(2), summary: `Grants of up to $5,000 for individual artists in any discipline. Applications due ${soon(45)}.\n\nThe program supports the creation of new work, including research, development, rehearsal and presentation costs. Artists at any stage of their career may apply; there is no application fee. Applicants must be at least 18, live in the United States, and not be enrolled in a degree program.\n\nApplications include a project description (up to 500 words), a budget, up to ten work samples and a short bio. A panel of working artists reviews every application, and decisions are announced about ten weeks after the deadline. Funded artists submit a one-page report within a year.`, categories: ["Grants"] },
     { id: "demo-5", feedId: "nycplaywrights", title: "Playwrights' Residency, Summer Session", link: "https://example.org/residency", date: ago(12), summary: "Four-week residency with housing and a $1,000 stipend.", categories: [] },
   ];
 }

@@ -735,3 +735,16 @@ describe("CV: freelance grant writing", () => {
     expect(theirs.sections.flatMap((s) => s.entries).map((e) => e.text)).toEqual(["Arts Education Grant, Pennsylvania Council on the Arts"]);
   });
 });
+
+describe("feed items drop off when stale", () => {
+  it("drops old items and ones whose dates have all passed", async () => {
+    const { isStaleFeedItem } = await import("../src/lib/feeds");
+    const today = new Date("2026-11-23T12:00:00Z");
+    const item = (date: string, summary: string) => ({ id: "x", feedId: "f", title: "Call", link: "", date, summary, categories: [] });
+    expect(isStaleFeedItem(item("2026-11-20T00:00:00Z", "Deadline January 15, 2027."), today)).toBe(false);
+    expect(isStaleFeedItem(item("2026-11-20T00:00:00Z", "Rolling, no deadline."), today)).toBe(false);
+    expect(isStaleFeedItem(item("2026-08-01T00:00:00Z", "Deadline January 15, 2027."), today)).toBe(true); // over 60 days old
+    expect(isStaleFeedItem(item("2026-11-01T00:00:00Z", "Applications were due November 10, 2026."), today)).toBe(true); // deadline passed
+    expect(isStaleFeedItem(item("", "No date at all."), today)).toBe(false);
+  });
+});

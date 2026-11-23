@@ -423,7 +423,9 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 20px 0; }
 .feed-item { padding: 10px 12px; }
 .feed-title { font-weight: 550; line-height: 1.35; color: var(--text); text-decoration: none; }
 .feed-title:hover { text-decoration: underline; }
-.feed-summary { margin: 6px 0 0; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-line; }
+.feed-summary { margin: 8px 0 2px; font-size: 14px; line-height: 1.55; display: -webkit-box; -webkit-line-clamp: 8; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-line; }
+.feed-summary.open { display: block; -webkit-line-clamp: unset; }
+.feed-item { padding: 14px 16px; }
 .new-pill { background: var(--accent-soft); color: var(--accent); font-size: 11px; padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
 
 /* Chart and status colors in Settings */
