@@ -213,10 +213,8 @@ export function GrantDrawer({ folder }: { folder: string }) {
         </span>
         <button
           className="btn small danger"
-          onClick={async () => {
-            if (await confirmAction("Move this application to trash?", "It goes to .manyapply/trash/ in your vault, so nothing is lost.", { okLabel: "Move to trash", danger: true }))
-              await del(folder);
-          }}
+          title="Moves it to .manyapply/trash/ in your vault. You can undo."
+          onClick={() => void del(folder)}
         >
           Delete
         </button>

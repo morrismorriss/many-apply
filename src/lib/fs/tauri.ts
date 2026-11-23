@@ -2,6 +2,9 @@ import * as fs from "@tauri-apps/plugin-fs";
 import type { Entry, VaultFS } from "./types";
 
 /** Real filesystem access through the Tauri fs plugin. `root` is an absolute folder path. */
+/** Never walked when listing the vault, unless listed directly. */
+const SKIP_DIRS = [".git", ".manyapply/trash", ".manyapply/imports", "node_modules"];
+
 export class TauriFS implements VaultFS {
   readonly kind = "tauri" as const;
   constructor(readonly root: string) {}
@@ -50,6 +53,9 @@ export class TauriFS implements VaultFS {
 
   async list(dir: string): Promise<Entry[]> {
     const out: Entry[] = [];
+    // Folders the app never shows, skipped unless asked for by name: the trash only ever grows, and
+    // walking it (or a git history) on every refresh is what made actions slow in a big vault.
+    const skip = (child: string) => SKIP_DIRS.includes(child) && !dir.startsWith(child);
     const walk = async (rel: string) => {
       let entries: fs.DirEntry[];
       try {
@@ -57,20 +63,25 @@ export class TauriFS implements VaultFS {
       } catch {
         return;
       }
-      for (const e of entries) {
-        const child = rel ? `${rel}/${e.name}` : e.name;
-        let mtime = 0;
-        if (e.isFile) {
-          try {
-            const st = await fs.stat(this.abs(child));
-            mtime = st.mtime ? new Date(st.mtime).getTime() : 0;
-          } catch {
-            /* ignore */
+      // Each folder's files and subfolders are read in parallel rather than one at a time.
+      await Promise.all(
+        entries.map(async (e) => {
+          const child = rel ? `${rel}/${e.name}` : e.name;
+          if (e.isDirectory && skip(child)) return;
+          let mtime = 0;
+          // Only text files need a modified time (it drives "no edits in N days"); media files can be large and many.
+          if (e.isFile && /\.(md|csv)$/i.test(e.name)) {
+            try {
+              const st = await fs.stat(this.abs(child));
+              mtime = st.mtime ? new Date(st.mtime).getTime() : 0;
+            } catch {
+              /* ignore */
+            }
           }
-        }
-        out.push({ path: child, isDir: e.isDirectory, mtime });
-        if (e.isDirectory && !(rel === "" && e.name === ".git")) await walk(child);
-      }
+          out.push({ path: child, isDir: e.isDirectory, mtime });
+          if (e.isDirectory) await walk(child);
+        }),
+      );
     };
     await walk(dir);
     return out;

@@ -1,9 +1,7 @@
 import { useState } from "react";
 import { useStore } from "../store";
 import { InlineSelect, InlineText, MenuButton, TagInput } from "./ui";
-import { confirmAction } from "./dialogs";
 import { SamplePreview, useAddSamples } from "./samples";
-import { trash } from "../lib/vault";
 import {
   SAMPLE_KINDS,
   SAMPLE_KIND_LABEL,
@@ -29,6 +27,7 @@ export function SampleDrawer({ path }: { path: string }) {
   const open = useStore((st) => st.openDrawer);
   const close = useStore((st) => st.closeDrawer);
   const toast = useStore((st) => st.toast);
+  const trashPaths = useStore((st) => st.trashPaths);
   const add = useAddSamples();
   const [version, setVersion] = useState(0);
   if (!s) return <p className="muted">This work sample isn't in the vault any more.</p>;
@@ -209,12 +208,10 @@ export function SampleDrawer({ path }: { path: string }) {
         <span className="grow" />
         <button
           className="btn small danger"
-          onClick={async () => {
-            if (!(await confirmAction("Move this work sample to trash?", "The sample and its file go to .manyapply/trash/ in your vault.", { okLabel: "Move to trash", danger: true }))) return;
-            await mutate(async (f) => {
-              for (const p of samplePaths(s)) if (await f.exists(p)) await trash(f, p);
-            });
+          title="Moves the sample and its file to .manyapply/trash/ in your vault. You can undo."
+          onClick={() => {
             close();
+            void trashPaths(samplePaths(s), (d) => ({ ...d, samples: d.samples.filter((x) => x.path !== s.path) }));
           }}
         >
           Delete

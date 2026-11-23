@@ -1,6 +1,5 @@
 import { useStore } from "../store";
 import { ClientSelect, InlineDate, InlineText, TagInput } from "./ui";
-import { confirmAction } from "./dialogs";
 import { trash } from "../lib/vault";
 import { DOC_EXTENSIONS, DOC_TYPES, documentFilePath, documentOwner, documentPaths, moveDocument, setDocumentFile, type VaultDocument } from "../lib/documents";
 import { previewMime } from "../lib/samples";
@@ -17,6 +16,7 @@ export function DocumentDrawer({ path }: { path: string }) {
   const close = useStore((s) => s.closeDrawer);
   const openDrawer = useStore((s) => s.openDrawer);
   const toast = useStore((s) => s.toast);
+  const trashPaths = useStore((s) => s.trashPaths);
   if (!d) return <p className="muted">This document isn't in the vault any more.</p>;
   const set = (patch: Partial<VaultDocument["fm"]>) => save({ ...d, fm: { ...d.fm, ...patch } });
   const file = documentFilePath(d);
@@ -113,12 +113,10 @@ export function DocumentDrawer({ path }: { path: string }) {
         <span className="grow" />
         <button
           className="btn small danger"
-          onClick={async () => {
-            if (!(await confirmAction("Move this document to trash?", "The document and its file go to .manyapply/trash/ in your vault. Empty that folder to remove it for good.", { okLabel: "Move to trash", danger: true }))) return;
-            await mutate(async (v) => {
-              for (const p of documentPaths(d)) if (await v.exists(p)) await trash(v, p);
-            });
+          title="Moves the document and its file to .manyapply/trash/ in your vault. You can undo. Empty that folder to remove it for good."
+          onClick={() => {
             close();
+            void trashPaths(documentPaths(d), (x) => ({ ...x, documents: x.documents.filter((y) => y.path !== d.path) }));
           }}
         >
           Delete

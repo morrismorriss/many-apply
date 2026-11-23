@@ -108,8 +108,11 @@ export class MemoryFS implements VaultFS {
   async list(dir: string): Promise<Entry[]> {
     const prefix = dir ? dir + "/" : "";
     const out: Entry[] = [];
+    // Like the desktop app: the trash, import logs and git history aren't walked unless asked for by name.
+    const skipped = [".git", ".manyapply/trash", ".manyapply/imports", "node_modules"].filter((d) => !dir.startsWith(d));
     for (const [p, n] of this.files) {
-      if (p.startsWith(prefix)) out.push({ path: p, isDir: n.data === null, mtime: n.mtime });
+      if (!p.startsWith(prefix) || skipped.some((d) => p === d || p.startsWith(d + "/"))) continue;
+      out.push({ path: p, isDir: n.data === null, mtime: n.mtime });
     }
     return out;
   }

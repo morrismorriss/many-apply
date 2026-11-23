@@ -108,6 +108,11 @@ interface State {
   addClient(name: string): Promise<string>;
   saveDonor(d: Donor): Promise<void>;
   addDonor(name: string, client?: string): Promise<string>;
+  /**
+   * Move files to the vault's trash. The screen updates at once (via `removeLocal`); the files move right
+   * after and the vault re-reads in the background. Offers Undo.
+   */
+  trashPaths(paths: string[], removeLocal: (d: VaultData) => VaultData, message?: string): Promise<void>;
   deleteDonor(slug: string): Promise<void>;
   saveLibrary(item: LibraryItem): Promise<void>;
   saveSample(s: WorkSample): Promise<void>;
@@ -120,6 +125,8 @@ interface State {
 let unwatch: (() => void) | null = null;
 let lastOwnWrite = 0;
 let toastId = 0;
+
+let reloadSeq = 0;
 
 /** Note a write the app made itself, so the folder watcher doesn't reload for it. */
 export function markWrite() {
@@ -277,8 +284,10 @@ export const useStore = create<State>((set, get) => {
     async reload() {
       const fs = get().fs;
       if (!fs) return;
+      // When reloads overlap, only the newest result is kept, so a slow older read can't undo a newer change.
+      const seq = ++reloadSeq;
       const data = await loadVault(fs);
-      set({ data });
+      if (seq === reloadSeq && get().fs === fs) set({ data });
     },
     go(route) {
       set({ route });
@@ -380,20 +389,8 @@ export const useStore = create<State>((set, get) => {
     },
 
     async deleteGrant(folder) {
-      const fs = get().fs!;
-      markWrite();
-      const dest = await trash(fs, `grants/${folder}`);
       if (get().drawer?.id === folder) set({ drawer: null });
-      await get().reload();
-      writeIcs();
-      get().toast("Moved to trash", "ok", {
-        label: "Undo",
-        run: async () => {
-          markWrite();
-          await fs.rename(dest, `grants/${folder}`);
-          await get().reload();
-        },
-      });
+      await get().trashPaths([`grants/${folder}`], (d) => ({ ...d, grants: d.grants.filter((g) => g.folder !== folder) }));
     },
 
     async saveFunder(f) {
@@ -425,18 +422,35 @@ export const useStore = create<State>((set, get) => {
       return slug;
     },
     async deleteDonor(slug) {
-      markWrite();
-      const fs = get().fs!;
-      const dest = await trash(fs, `donors/${slug}.md`);
       if (get().drawer?.id === slug) set({ drawer: null });
-      await get().reload();
-      get().toast("Moved to trash", "ok", {
+      await get().trashPaths([`donors/${slug}.md`], (d) => ({ ...d, donors: d.donors.filter((x) => x.slug !== slug) }));
+    },
+    async trashPaths(paths, removeLocal, message = "Moved to trash") {
+      const fs = get().fs;
+      if (!fs) return;
+      const before = get().data;
+      if (before) set({ data: removeLocal(before) });
+      markWrite();
+      const moved: [string, string][] = [];
+      try {
+        for (const p of paths) if (await fs.exists(p)) moved.push([p, await trash(fs, p)]);
+      } catch (e) {
+        get().toast(`Couldn't move it to trash: ${errorText(e)}`, "error");
+        await get().reload();
+        return;
+      }
+      get().toast(message, "ok", {
         label: "Undo",
         run: async () => {
           markWrite();
-          await fs.rename(dest, `donors/${slug}.md`);
+          for (const [p, dest] of [...moved].reverse()) await fs.rename(dest, p);
           await get().reload();
+          writeIcs();
         },
+      });
+      void get().reload().then(() => {
+        markWrite();
+        writeIcs();
       });
     },
     async saveLibrary(item) {

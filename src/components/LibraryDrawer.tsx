@@ -1,7 +1,6 @@
 import { useStore } from "../store";
 import { InlineText, MenuButton, TagInput } from "./ui";
-import { confirmAction } from "./dialogs";
-import { createLibraryItem, moveLibraryItem, trash } from "../lib/vault";
+import { createLibraryItem, moveLibraryItem } from "../lib/vault";
 import { dirname } from "../lib/fs/types";
 import { errorText } from "../lib/platform";
 import { wordCount } from "../lib/util";
@@ -17,6 +16,7 @@ export function LibraryDrawer({ path }: { path: string }) {
   const open = useStore((s) => s.openDrawer);
   const close = useStore((s) => s.closeDrawer);
   const toast = useStore((s) => s.toast);
+  const trashPaths = useStore((s) => s.trashPaths);
   const folders = useStore((s) => s.data?.libraryFolders ?? []);
   if (!item) return <p className="muted">This item isn't in the Library any more.</p>;
   const owner = path.split("/")[0];
@@ -111,10 +111,10 @@ export function LibraryDrawer({ path }: { path: string }) {
         <span className="grow" />
         <button
           className="btn small danger"
-          onClick={async () => {
-            if (!(await confirmAction("Move this answer to trash?", "It goes to .manyapply/trash/ in your vault.", { okLabel: "Move to trash", danger: true }))) return;
-            await mutate((fs) => trash(fs, `library/${path}`));
+          title="Moves it to .manyapply/trash/ in your vault. You can undo."
+          onClick={() => {
             close();
+            void trashPaths([`library/${path}`], (d) => ({ ...d, library: d.library.filter((i) => i.path !== path) }));
           }}
         >
           Delete
