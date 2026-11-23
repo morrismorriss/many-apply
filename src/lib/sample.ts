@@ -129,7 +129,7 @@ export function sampleVault(today = new Date()): { files: Record<string, string>
     ["erie-insurance", "Erie Insurance", "corporate", "https://example.org/erie-insurance"],
   ];
   for (const [slug, name, type, web] of funders) {
-    files[`funders/${slug}.md`] = stringifyFrontmatter({ name, website: web, funder_type: type, contacts: "", notes: "" }, "");
+    files[`funders/${slug}.md`] = stringifyFrontmatter({ name, website: web, funder_type: type, contact_name: "", contact_email: "", contact_phone: "", contacts: "", notes: "" }, "");
   }
 
   files["clients/me.md"] = stringifyFrontmatter(

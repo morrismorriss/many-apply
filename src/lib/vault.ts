@@ -29,7 +29,7 @@ export const GRANT_ORDER = [
   "max_award", "currency", "deadline", "deadline_type", "project", "location", "tags", "submitted_on",
   "decision_expected", "decision_on", "todoist_task_ids", "reports", "no_reporting", "work_samples", "library_items", "documents", "created", "updated", "status_history", "time_log",
 ];
-const FUNDER_ORDER = ["name", "website", "funder_type", "contacts", "notes"];
+const FUNDER_ORDER = ["name", "website", "funder_type", "contact_name", "contact_email", "contact_phone", "contacts", "notes"];
 const CLIENT_ORDER = [
   "name", "type", "contact_person", "contact_email", "website", "mission", "fiscal_year_start",
   "annual_budget", "fiscal_sponsor", "color", "todoist_project_id", "budget_template",
@@ -347,6 +347,9 @@ async function readFunder(fs: VaultFS, p: string): Promise<Funder> {
       name: str(data.name) || slug,
       website: str(data.website),
       funder_type: str(data.funder_type),
+      contact_name: str(data.contact_name),
+      contact_email: str(data.contact_email),
+      contact_phone: str(data.contact_phone),
       contacts: str(data.contacts),
       notes: str(data.notes),
     },
@@ -541,7 +544,7 @@ export async function ensureFunder(fs: VaultFS, name: string): Promise<{ slug: s
   if (await fs.exists(`funders/${slug}.md`)) return { slug, created: false };
   await writeFunder(fs, {
     slug,
-    fm: { name, website: "", funder_type: "", contacts: "", notes: "" },
+    fm: { name, website: "", funder_type: "", contact_name: "", contact_email: "", contact_phone: "", contacts: "", notes: "" },
     body: "",
   });
   return { slug, created: true };

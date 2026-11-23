@@ -415,6 +415,53 @@ export function ClientSelect({ value, onChange, className = "inline", allowNew =
   );
 }
 
+/** Pick one or more clients (you and/or anyone you apply for) as removable chips. At least one is always kept. */
+export function ClientMultiSelect({ value, onChange, label = "Add a client", style }: {
+  value: string[];
+  onChange: (v: string[]) => void;
+  label?: string;
+  style?: CSSProperties;
+}) {
+  const clients = useStore((s) => s.data?.clients ?? []);
+  const addClient = useStore((s) => s.addClient);
+  const { clientName } = useLookups();
+  const rest = clients.filter((c) => !value.includes(c.slug));
+  return (
+    <div className="row wrap" style={{ gap: 6, padding: "2px 0", ...style }}>
+      {value.map((c) => (
+        <span key={c} className="tag" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+          {clientName(c)}
+          {value.length > 1 && (
+            <button type="button" className="icon-btn" style={{ width: 18, height: 18, fontSize: 12 }} title={`Remove ${clientName(c)}`} onClick={() => onChange(value.filter((x) => x !== c))}>
+              ×
+            </button>
+          )}
+        </span>
+      ))}
+      <select
+        className="select inline"
+        style={{ width: "auto" }}
+        aria-label={label}
+        value=""
+        onChange={async (e) => {
+          const v = e.target.value;
+          if (v === "__new") {
+            const name = await askText("New client", { placeholder: "Organization or person" });
+            if (name?.trim()) {
+              const slug = await addClient(name.trim());
+              if (!value.includes(slug)) onChange([...value, slug]);
+            }
+          } else if (v) onChange([...value, v]);
+        }}
+      >
+        <option value="">+ Add…</option>
+        {rest.map((c) => <option key={c.slug} value={c.slug}>{c.fm.name}</option>)}
+        <option value="__new">+ New client…</option>
+      </select>
+    </div>
+  );
+}
+
 export function FunderSelect({ value, onChange, className = "inline" }: { value: string; onChange: (slug: string, name: string) => void; className?: string }) {
   const funders = useStore((s) => s.data?.funders ?? []);
   const mutate = useStore((s) => s.mutate);

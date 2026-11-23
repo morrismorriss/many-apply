@@ -128,6 +128,9 @@ export interface Funder {
     name: string;
     website: string;
     funder_type: string;
+    contact_name: string;
+    contact_email: string;
+    contact_phone: string;
     contacts: string;
     notes: string;
     [extra: string]: unknown;

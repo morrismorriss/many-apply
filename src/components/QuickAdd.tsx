@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useStore } from "../store";
-import { ClientSelect, FunderSelect, Modal, TagInput, useAllTags } from "./ui";
+import { ClientMultiSelect, FunderSelect, Modal, TagInput, useAllTags } from "./ui";
 import { findAmounts, findDates, findUrl } from "../lib/extract";
 import { GRANT_TYPES, ME, STATUSES, STATUS_LABEL, type GrantFM, type Status } from "../lib/model";
 import { defaultGrantBody, setBodySection } from "../lib/vault";
@@ -10,6 +10,7 @@ export function QuickAdd({ onClose, status = "researching" }: { onClose: () => v
   const addGrant = useStore((s) => s.addGrant);
   const open = useStore((s) => s.openDrawer);
   const clientFilter = useStore((s) => s.clientFilter);
+  const toast = useStore((s) => s.toast);
   const tagsAll = useAllTags();
   const [f, setF] = useState({
     title: "",
@@ -20,7 +21,7 @@ export function QuickAdd({ onClose, status = "researching" }: { onClose: () => v
     max: "",
     type: "grant" as GrantFM["type"],
     tags: [] as string[],
-    client: clientFilter || ME,
+    clients: [clientFilter || ME],
     status,
   });
   const [paste, setPaste] = useState("");
@@ -32,23 +33,29 @@ export function QuickAdd({ onClose, status = "researching" }: { onClose: () => v
   const submit = async () => {
     if (!f.title.trim()) return;
     const body = paste.trim() ? setBodySection(defaultGrantBody(), "Eligibility", paste.trim()) : defaultGrantBody();
-    const g = await addGrant(
-      {
-        title: f.title.trim(),
-        funder: f.funder,
-        url: f.url.trim(),
-        deadline: f.deadline,
-        amount_requested: f.amount ? Number(f.amount.replace(/[^0-9.]/g, "")) : null,
-        max_award: f.max ? Number(f.max.replace(/[^0-9.]/g, "")) : null,
-        type: f.type,
-        tags: f.tags,
-        client: f.client,
-        status: f.status,
-      },
-      body,
-    );
+    // One opportunity per client: each is its own application, with its own status, drafts and amounts.
+    let first: Awaited<ReturnType<typeof addGrant>> | null = null;
+    for (const client of f.clients) {
+      const g = await addGrant(
+        {
+          title: f.title.trim(),
+          funder: f.funder,
+          url: f.url.trim(),
+          deadline: f.deadline,
+          amount_requested: f.amount ? Number(f.amount.replace(/[^0-9.]/g, "")) : null,
+          max_award: f.max ? Number(f.max.replace(/[^0-9.]/g, "")) : null,
+          type: f.type,
+          tags: f.tags,
+          client,
+          status: f.status,
+        },
+        body,
+      );
+      first ??= g;
+    }
+    if (f.clients.length > 1) toast(`Added for ${f.clients.length} clients`, "ok");
     onClose();
-    open({ kind: "grant", id: g.folder });
+    if (first) open({ kind: "grant", id: first.folder });
   };
 
   return (
@@ -105,11 +112,11 @@ export function QuickAdd({ onClose, status = "researching" }: { onClose: () => v
               <TagInput value={f.tags} suggestions={tagsAll} onSave={(tags) => set({ tags })} />
             </div>
           </label>
+          <div className="field">
+            For
+            <ClientMultiSelect value={f.clients} label="Add who it's for" onChange={(clients) => set({ clients })} />
+          </div>
           <div className="row">
-            <label className="field grow">
-              For
-              <ClientSelect className="select" value={f.client} onChange={(client) => set({ client })} />
-            </label>
             <label className="field grow">
               Status
               <select className="select" value={f.status} onChange={(e) => set({ status: e.target.value as Status })}>

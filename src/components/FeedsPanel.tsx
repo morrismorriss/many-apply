@@ -6,7 +6,7 @@ import { errorText, openExternal } from "../lib/platform";
 import { defaultGrantBody, setBodySection } from "../lib/vault";
 import { fmtDate, slugify } from "../lib/util";
 import { confirmAction } from "./dialogs";
-import { ClientSelect } from "./ui";
+import { ClientMultiSelect } from "./ui";
 import { ME } from "../lib/model";
 
 /** Items from turned-on feeds that pass their keyword filter and haven't been hidden. */
@@ -46,8 +46,8 @@ export function FeedsPanel() {
   const hasClients = useStore((s) => (s.data?.clients.length ?? 0) > 1);
   const { clientName } = useLookups();
   // Who saved items are for: the sidebar's client, until changed here.
-  const [saveFor, setSaveFor] = useState(clientFilter || ME);
-  useEffect(() => setSaveFor(clientFilter || ME), [clientFilter]);
+  const [saveFor, setSaveFor] = useState<string[]>([clientFilter || ME]);
+  useEffect(() => setSaveFor([clientFilter || ME]), [clientFilter]);
   const [saving, setSaving] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
@@ -75,11 +75,17 @@ export function FeedsPanel() {
     try {
       const f = byId.get(i.feedId);
       const g = itemToGrant(i, f?.name ?? "a feed");
-      const created = await addGrant(
-        { title: g.title, url: g.url, deadline: g.deadline, max_award: g.max_award, status: "researching", client: saveFor },
-        setBodySection(defaultGrantBody(), "Eligibility", g.eligibility),
-      );
-      toast(hasClients ? `Saved to Research for ${clientName(saveFor)}` : "Saved to Research", "ok", { label: "Open", run: () => openDrawer({ kind: "grant", id: created.folder }) });
+      // One copy per client, since each is its own application.
+      let created: Awaited<ReturnType<typeof addGrant>> | null = null;
+      for (const client of saveFor) {
+        const c = await addGrant(
+          { title: g.title, url: g.url, deadline: g.deadline, max_award: g.max_award, status: "researching", client },
+          setBodySection(defaultGrantBody(), "Eligibility", g.eligibility),
+        );
+        created ??= c;
+      }
+      const first = created!;
+      toast(hasClients ? `Saved to Research for ${saveFor.map(clientName).join(", ")}` : "Saved to Research", "ok", { label: "Open", run: () => openDrawer({ kind: "grant", id: first.folder }) });
     } catch (e) {
       toast(`Couldn't save it: ${errorText(e)}`, "error");
       savingRef.current.delete(i.id);
@@ -136,7 +142,7 @@ export function FeedsPanel() {
           {hasClients && (
             <div className="row small" style={{ margin: "-4px 0 12px" }}>
               <span className="soft">Save to Research for</span>
-              <ClientSelect className="select" style={{ width: "auto", maxWidth: 220 }} value={saveFor} onChange={setSaveFor} />
+              <ClientMultiSelect value={saveFor} label="Add who to save for" onChange={setSaveFor} />
             </div>
           )}
           {Object.entries(errors).filter(([id]) => byId.get(id)?.enabled).map(([id, msg]) => (

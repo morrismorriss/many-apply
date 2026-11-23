@@ -104,6 +104,8 @@ interface State {
   addReport(folder: string, r: ReportDate): Promise<void>;
   deleteGrant(folder: string): Promise<void>;
   saveFunder(f: Funder): Promise<void>;
+  /** Move a funder to the vault's trash (with Undo). Applications to it keep their funder name. */
+  deleteFunder(slug: string): Promise<void>;
   saveClient(c: Client): Promise<void>;
   addClient(name: string): Promise<string>;
   saveDonor(d: Donor): Promise<void>;
@@ -420,6 +422,11 @@ export const useStore = create<State>((set, get) => {
       const slug = await createDonor(get().fs!, name, client);
       await get().reload();
       return slug;
+    },
+    async deleteFunder(slug) {
+      const d = get().drawer;
+      if (d?.kind === "funder" && d.id === slug) set({ drawer: null });
+      await get().trashPaths([`funders/${slug}.md`], (x) => ({ ...x, funders: x.funders.filter((f) => f.slug !== slug) }));
     },
     async deleteDonor(slug) {
       if (get().drawer?.id === slug) set({ drawer: null });

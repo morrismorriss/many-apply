@@ -4,12 +4,27 @@ import { funderStats } from "../lib/stats";
 import { fmtDate, fmtMoney } from "../lib/util";
 import { openExternal } from "../lib/platform";
 import { ClientLabel, InlineText, StatusPill } from "./ui";
+import { confirmAction } from "./dialogs";
+
+/** Deleting a funder never touches its applications, but say so when it has some. */
+export async function confirmDeleteFunder(name: string, applications: number, run: () => Promise<void>) {
+  if (applications > 0) {
+    const ok = await confirmAction(
+      `Delete ${name}?`,
+      `Its ${applications === 1 ? "application stays" : `${applications} applications stay`} in your vault and keep the funder's name. You can undo.`,
+      { okLabel: "Delete", danger: true },
+    );
+    if (!ok) return;
+  }
+  await run();
+}
 
 export function FunderDrawer({ slug }: { slug: string }) {
   const funder = useStore((s) => s.data?.funders.find((f) => f.slug === slug));
   const grants = useStore((s) => s.data?.grants ?? []);
   const save = useStore((s) => s.saveFunder);
   const open = useStore((s) => s.openDrawer);
+  const del = useStore((s) => s.deleteFunder);
   if (!funder) return <p className="muted">This funder isn't in the vault any more.</p>;
   const st = funderStats(funder, grants);
   const set = (patch: Partial<Funder["fm"]>) => save({ ...funder, fm: { ...funder.fm, ...patch } });
@@ -52,9 +67,26 @@ export function FunderDrawer({ slug }: { slug: string }) {
               ))}
             </select>
           </div>
-          <div className="k">Contacts</div>
+          <div className="k">Contact name</div>
           <div className="v">
-            <InlineText multiline value={funder.fm.contacts} placeholder="Program officer, email, phone" onSave={(contacts) => set({ contacts })} />
+            <InlineText value={funder.fm.contact_name} placeholder="Program officer" onSave={(contact_name) => set({ contact_name })} />
+          </div>
+          <div className="k">Email</div>
+          <div className="v">
+            <InlineText type="email" value={funder.fm.contact_email} placeholder="Empty" onSave={(contact_email) => set({ contact_email })} />
+            {funder.fm.contact_email && (
+              <button className="icon-btn" onClick={() => openExternal(`mailto:${funder.fm.contact_email}`)} title="Write an email">
+                ✉
+              </button>
+            )}
+          </div>
+          <div className="k">Phone</div>
+          <div className="v">
+            <InlineText value={funder.fm.contact_phone} placeholder="Empty" onSave={(contact_phone) => set({ contact_phone })} />
+          </div>
+          <div className="k">Other contacts</div>
+          <div className="v">
+            <InlineText multiline value={funder.fm.contacts} placeholder="Anyone else, with email or phone" onSave={(contacts) => set({ contacts })} />
           </div>
           <div className="k">Notes</div>
           <div className="v">
@@ -85,7 +117,12 @@ export function FunderDrawer({ slug }: { slug: string }) {
           </table>
         )}
       </section>
-      <p className="muted small" style={{ marginTop: 24 }}>funders/{slug}.md</p>
+      <section className="row" style={{ marginTop: 24 }}>
+        <span className="muted small grow">funders/{slug}.md</span>
+        <button className="btn small danger" title="Moves it to .manyapply/trash/ in your vault. You can undo." onClick={() => void confirmDeleteFunder(funder.fm.name, st.grants.length, () => del(slug))}>
+          Delete
+        </button>
+      </section>
     </div>
   );
 }

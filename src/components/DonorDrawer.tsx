@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useLookups, useStore } from "../store";
-import { InlineDate, InlineText, TagInput } from "./ui";
-import { askText, confirmAction } from "./dialogs";
+import { ClientMultiSelect, InlineDate, InlineText, TagInput } from "./ui";
+import { confirmAction } from "./dialogs";
 import { DONOR_STAGES, DONOR_STAGE_LABEL, TOUCH_KINDS, giftTo, looksLapsed, summarize, type Donor, type Gift, type Touch } from "../lib/donors";
 import { fmtDate, fmtMoney, parseNumber, todayISO } from "../lib/util";
 import { StagePill } from "../screens/Giving";
@@ -49,7 +49,7 @@ export function DonorDrawer({ slug }: { slug: string }) {
         <h3>Contact</h3>
         <div className="props">
           <div className="k">Gave to</div>
-          <div className="v"><GaveTo value={d.fm.gave_to} onChange={(gave_to) => set({ gave_to })} /></div>
+          <div className="v"><ClientMultiSelect value={d.fm.gave_to} label="Add who they gave to" onChange={(gave_to) => set({ gave_to })} /></div>
           <div className="k">Email</div>
           <div className="v"><InlineText type="email" value={d.fm.email} placeholder="Empty" onSave={(email) => set({ email })} /></div>
           <div className="k">Phone</div>
@@ -246,44 +246,5 @@ function Touches({ d, onChange }: { d: Donor; onChange: (t: Touch[]) => void }) 
         ))}
       </div>
     </section>
-  );
-}
-
-/** Who a donor gives to: you and/or any clients. At least one is always kept. */
-function GaveTo({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
-  const clients = useStore((s) => s.data?.clients ?? []);
-  const addClient = useStore((s) => s.addClient);
-  const { clientName } = useLookups();
-  const rest = clients.filter((c) => !value.includes(c.slug));
-  return (
-    <div className="row wrap" style={{ gap: 6, padding: "2px 0" }}>
-      {value.map((c) => (
-        <span key={c} className="tag" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-          {clientName(c)}
-          {value.length > 1 && (
-            <button className="icon-btn" style={{ width: 18, height: 18, fontSize: 12 }} title={`Remove ${clientName(c)}`} onClick={() => onChange(value.filter((x) => x !== c))}>
-              ×
-            </button>
-          )}
-        </span>
-      ))}
-      <select
-        className="select inline"
-        style={{ width: "auto" }}
-        aria-label="Add who they gave to"
-        value=""
-        onChange={async (e) => {
-          const v = e.target.value;
-          if (v === "__new") {
-            const name = await askText("New client", { placeholder: "Organization or person" });
-            if (name?.trim()) onChange([...value, await addClient(name.trim())]);
-          } else if (v) onChange([...value, v]);
-        }}
-      >
-        <option value="">+ Add…</option>
-        {rest.map((c) => <option key={c.slug} value={c.slug}>{c.fm.name}</option>)}
-        <option value="__new">+ New client…</option>
-      </select>
-    </div>
   );
 }

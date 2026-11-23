@@ -1,7 +1,7 @@
 {
   "name": "many-apply",
   "private": true,
-  "version": "0.6.0",
+  "version": "0.7.0",
   "type": "module",
   "description": "Free, local-first desktop app for artists to research, track and write grants.",
   "license": "MIT",
