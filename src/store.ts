@@ -19,7 +19,7 @@ import {
   type VaultData,
 } from "./lib/vault";
 import type { Client, Funder, Grant, GrantFM, LibraryItem, ReportDate, Settings, Status, TimeEntry } from "./lib/model";
-import { ME } from "./lib/model";
+import { ME, isFor } from "./lib/model";
 import * as todoist from "./lib/todoist";
 import { calendarEvents, toICS } from "./lib/stats";
 import { debounce, fmtMinutes, todayISO } from "./lib/util";
@@ -322,10 +322,12 @@ export const useStore = create<State>((set, get) => {
     async addGrant(partial, body) {
       const fs = get().fs!;
       markWrite();
-      if (partial.client && partial.client !== ME && !get().data?.clients.some((c) => c.slug === partial.client)) {
-        await ensureClient(fs, partial.client);
+      // Several clients can be given; the first is the main one.
+      const clients = partial.clients?.length ? [...new Set(partial.clients)] : [partial.client || get().clientFilter || ME];
+      for (const c of clients) {
+        if (c !== ME && !get().data?.clients.some((x) => x.slug === c)) await ensureClient(fs, c);
       }
-      const g = await createGrant(fs, { client: get().clientFilter || ME, ...partial }, body);
+      const g = await createGrant(fs, { ...partial, client: clients[0], clients }, body);
       await get().reload();
       if (g.fm.status === "planning") await get().setStatus(g.folder, "planning");
       writeIcs();
@@ -499,9 +501,9 @@ export const useStore = create<State>((set, get) => {
 
 // ---- Selectors / helpers
 
-export function useFiltered<T extends { fm: { client: string } }>(xs: T[]): T[] {
+export function useFiltered<T extends { fm: { client: string; clients?: unknown } }>(xs: T[]): T[] {
   const c = useStore((s) => s.clientFilter);
-  return c ? xs.filter((x) => x.fm.client === c) : xs;
+  return c ? xs.filter((x) => isFor(x.fm, c)) : xs;
 }
 
 export function useGrants(): Grant[] {

@@ -3,7 +3,7 @@ import { useGrants, useStore } from "../store";
 import { calendarEvents, toICS, type CalEvent } from "../lib/stats";
 import { addDays, fmtDate, MONTH_NAMES, toISO } from "../lib/util";
 import { saveFile } from "../lib/platform";
-import { ClientLabel, statusColor } from "../components/ui";
+import { ClientLabels, statusColor } from "../components/ui";
 
 const KIND_LABEL: Record<CalEvent["kind"], string> = {
   deadline: "Deadline",
@@ -146,7 +146,7 @@ function Agenda({ events }: { events: CalEvent[] }) {
                 <span className={e.done && e.kind !== "submitted" ? "muted" : ""} style={{ textDecoration: e.done && e.kind !== "submitted" ? "line-through" : undefined }}>
                   {e.grant.fm.title}
                 </span>
-                <ClientLabel slug={e.grant.fm.client} />
+                <ClientLabels fm={e.grant.fm} />
               </div>
             ))}
           </div>

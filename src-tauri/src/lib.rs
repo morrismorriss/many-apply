@@ -88,7 +88,7 @@ async fn fetch_feed(url: String) -> Result<String, String> {
     const MAX: usize = 5 * 1024 * 1024;
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(20))
-        .user_agent("ManyApply/0.7 (RSS reader)")
+        .user_agent("ManyApply/0.8 (RSS reader)")
         .build()
         .map_err(|e| e.to_string())?;
     let resp = client
@@ -138,6 +138,7 @@ pub fn run() {
             open_file,
             fetch_feed,
             bridge::bridge_set_code,
+            bridge::bridge_set_clients,
             bridge::bridge_status
         ])
         .run(tauri::generate_context!())

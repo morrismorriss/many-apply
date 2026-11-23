@@ -23,6 +23,21 @@ export async function send(grant, code) {
   }
 }
 
+/** The app's clients, as [{ slug, name }]. Cached so the popup can still offer them while the app is closed. */
+export async function getClients(code) {
+  try {
+    const res = await fetch(`${ENDPOINT}/clients`, { headers: { "X-Pairing-Code": code } });
+    if (res.ok) {
+      const { clients = [] } = await res.json();
+      await chrome.storage.local.set({ clients });
+      return clients;
+    }
+  } catch {
+    /* app closed: use the cached list */
+  }
+  return (await chrome.storage.local.get("clients")).clients || [];
+}
+
 export async function queue(grant) {
   const { queue = [] } = await chrome.storage.local.get("queue");
   queue.push({ ...grant, queuedAt: Date.now() });

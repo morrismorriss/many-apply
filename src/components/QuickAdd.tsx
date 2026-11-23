@@ -10,7 +10,6 @@ export function QuickAdd({ onClose, status = "researching" }: { onClose: () => v
   const addGrant = useStore((s) => s.addGrant);
   const open = useStore((s) => s.openDrawer);
   const clientFilter = useStore((s) => s.clientFilter);
-  const toast = useStore((s) => s.toast);
   const tagsAll = useAllTags();
   const [f, setF] = useState({
     title: "",
@@ -33,29 +32,23 @@ export function QuickAdd({ onClose, status = "researching" }: { onClose: () => v
   const submit = async () => {
     if (!f.title.trim()) return;
     const body = paste.trim() ? setBodySection(defaultGrantBody(), "Eligibility", paste.trim()) : defaultGrantBody();
-    // One opportunity per client: each is its own application, with its own status, drafts and amounts.
-    let first: Awaited<ReturnType<typeof addGrant>> | null = null;
-    for (const client of f.clients) {
-      const g = await addGrant(
-        {
-          title: f.title.trim(),
-          funder: f.funder,
-          url: f.url.trim(),
-          deadline: f.deadline,
-          amount_requested: f.amount ? Number(f.amount.replace(/[^0-9.]/g, "")) : null,
-          max_award: f.max ? Number(f.max.replace(/[^0-9.]/g, "")) : null,
-          type: f.type,
-          tags: f.tags,
-          client,
-          status: f.status,
-        },
-        body,
-      );
-      first ??= g;
-    }
-    if (f.clients.length > 1) toast(`Added for ${f.clients.length} clients`, "ok");
+    const g = await addGrant(
+      {
+        title: f.title.trim(),
+        funder: f.funder,
+        url: f.url.trim(),
+        deadline: f.deadline,
+        amount_requested: f.amount ? Number(f.amount.replace(/[^0-9.]/g, "")) : null,
+        max_award: f.max ? Number(f.max.replace(/[^0-9.]/g, "")) : null,
+        type: f.type,
+        tags: f.tags,
+        clients: f.clients,
+        status: f.status,
+      },
+      body,
+    );
     onClose();
-    if (first) open({ kind: "grant", id: first.folder });
+    open({ kind: "grant", id: g.folder });
   };
 
   return (

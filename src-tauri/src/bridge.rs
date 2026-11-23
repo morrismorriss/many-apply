@@ -29,11 +29,18 @@ const FAILURE_DELAY: Duration = Duration::from_millis(400);
 pub struct BridgeState {
     code: Arc<Mutex<String>>,
     running: Arc<Mutex<bool>>,
+    /// The vault's clients as [{ slug, name }], so the extension can offer "who it's for".
+    clients: Arc<Mutex<Value>>,
 }
 
 #[tauri::command]
 pub fn bridge_set_code(state: tauri::State<'_, BridgeState>, code: String) {
     *state.code.lock().unwrap() = code;
+}
+
+#[tauri::command]
+pub fn bridge_set_clients(state: tauri::State<'_, BridgeState>, clients: Value) {
+    *state.clients.lock().unwrap() = if clients.is_array() { clients } else { json!([]) };
 }
 
 #[tauri::command]
@@ -138,6 +145,19 @@ pub fn start(app: AppHandle, state: BridgeState) {
                 _ if !host_ok(host.as_deref()) => reply(403, json!({ "error": "Not allowed" }), None),
                 (Method::Options, _) => reply(204, json!({}), origin),
                 (Method::Get, "/ping") => reply(200, json!({ "app": "many-apply", "paired": paired }), origin),
+                // Client names are only handed to a paired extension.
+                (Method::Get, "/clients") => {
+                    if !origin_ok(origin) {
+                        reply(403, json!({ "error": "Not allowed" }), None)
+                    } else if locked {
+                        reply(429, json!({ "error": "Too many wrong pairing codes. Wait a minute." }), origin)
+                    } else if !paired {
+                        reply(401, json!({ "error": "Wrong pairing code. Check Settings in Many Apply." }), origin)
+                    } else {
+                        let clients = state.clients.lock().unwrap().clone();
+                        reply(200, json!({ "clients": clients }), origin)
+                    }
+                }
                 (Method::Post, "/grant") => {
                     if !origin_ok(origin) {
                         reply(403, json!({ "error": "Not allowed" }), None)

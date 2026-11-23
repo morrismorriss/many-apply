@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Bar } from "react-chartjs-2";
 import { useLookups, useStore } from "../store";
+import { isFor } from "../lib/model";
 import {
   deadlineHeatmap,
   filterForReports,
@@ -105,7 +106,7 @@ export function Reports() {
 
   const byClient = clients
     .map((c) => {
-      const gs = grants.filter((g) => g.fm.client === c.slug);
+      const gs = grants.filter((g) => isFor(g.fm, c.slug));
       return {
         c,
         n: gs.length,

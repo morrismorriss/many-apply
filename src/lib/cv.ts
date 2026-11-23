@@ -17,7 +17,7 @@
 import { parseFrontmatter, stringifyFrontmatter } from "./frontmatter";
 import type { VaultFS } from "./fs/types";
 import type { Grant } from "./model";
-import { ME } from "./model";
+import { ME, isFor } from "./model";
 import type { WorkSample } from "./samples";
 import { para, packDocx, inlineRuns, run } from "./reviewExport";
 import { asArray, fmtMoney, str } from "./util";
@@ -195,7 +195,7 @@ export function awardEntry(
 
 /** A client's CV gets their own awards; yours also gets every award you won for a client. */
 const awardedFor = (cv: Cv, grants: Grant[]) =>
-  grants.filter((g) => g.fm.status === "awarded" && ((cv.client || ME) === ME || (g.fm.client || ME) === (cv.client || ME)));
+  grants.filter((g) => g.fm.status === "awarded" && ((cv.client || ME) === ME || isFor(g.fm, cv.client || ME)));
 
 /**
  * Keep the CV in step with awarded applications: add any that aren't on it (unless they were taken off),

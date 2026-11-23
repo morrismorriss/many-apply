@@ -3,7 +3,7 @@ import { FUNDER_TYPES, type Funder } from "../lib/model";
 import { funderStats } from "../lib/stats";
 import { fmtDate, fmtMoney } from "../lib/util";
 import { openExternal } from "../lib/platform";
-import { ClientLabel, InlineText, StatusPill } from "./ui";
+import { ClientLabels, InlineText, StatusPill } from "./ui";
 import { confirmAction } from "./dialogs";
 
 /** Deleting a funder never touches its applications, but say so when it has some. */
@@ -104,7 +104,7 @@ export function FunderDrawer({ slug }: { slug: string }) {
               {st.grants.map((g) => (
                 <tr key={g.folder} className="click" onClick={() => open({ kind: "grant", id: g.folder })}>
                   <td>
-                    {g.fm.title} <ClientLabel slug={g.fm.client} />
+                    {g.fm.title} <ClientLabels fm={g.fm} />
                   </td>
                   <td className="muted small">{fmtDate(g.fm.deadline, { year: true })}</td>
                   <td className="r num">{fmtMoney(g.fm.amount_awarded ?? g.fm.amount_requested, g.fm.currency)}</td>

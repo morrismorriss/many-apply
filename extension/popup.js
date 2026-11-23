@@ -1,4 +1,4 @@
-import { ENDPOINT, findAmounts, findDates, flush, getCode, queue, send } from "./shared.js";
+import { ENDPOINT, findAmounts, findDates, flush, getClients, getCode, queue, send } from "./shared.js";
 
 const $ = (id) => document.getElementById(id);
 const msg = (text, cls = "") => { $("msg").textContent = text; $("msg").className = cls; };
@@ -19,6 +19,33 @@ async function status() {
     if (!code) $("pair").hidden = false;
   }
 }
+
+/** "For" checkboxes, shown once there's someone besides you. Remembers the last choice. */
+async function showClients() {
+  const clients = await getClients(await getCode());
+  const box = $("forList");
+  box.textContent = "";
+  if (clients.length < 2) {
+    $("forBox").hidden = true;
+    return;
+  }
+  const slugs = new Set(clients.map((c) => c.slug));
+  const { lastFor = [] } = await chrome.storage.local.get("lastFor");
+  let chosen = lastFor.filter((s) => slugs.has(s));
+  if (!chosen.length) chosen = [clients[0].slug];
+  for (const c of clients) {
+    const label = document.createElement("label");
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.value = c.slug;
+    input.checked = chosen.includes(c.slug);
+    label.append(input, document.createTextNode(c.name));
+    box.appendChild(label);
+  }
+  $("forBox").hidden = false;
+}
+
+const chosenClients = () => [...document.querySelectorAll("#forList input:checked")].map((i) => i.value);
 
 function suggest(text) {
   const box = $("suggest");
@@ -57,12 +84,14 @@ async function init() {
   suggest(($("selection").value || "") + "\n" + pageText);
   $("selection").addEventListener("input", (e) => suggest(e.target.value + "\n" + pageText));
   await status();
+  await showClients();
 }
 
 $("saveCode").onclick = async () => {
   await chrome.storage.local.set({ pairingCode: $("code").value.trim() });
   $("pair").hidden = true;
   await status();
+  await showClients();
 };
 $("repair").onclick = async () => {
   $("pair").hidden = !$("pair").hidden;
@@ -85,6 +114,15 @@ $("form").onsubmit = async (e) => {
     [target]: sel || undefined,
   };
   if (!grant.title) return;
+  if (!$("forBox").hidden) {
+    const clients = chosenClients();
+    if (!clients.length) {
+      msg("Choose who it's for.", "err");
+      return;
+    }
+    grant.clients = clients;
+    await chrome.storage.local.set({ lastFor: clients });
+  }
   try {
     await send(grant, await getCode());
     msg("Saved to Many Apply.", "ok");

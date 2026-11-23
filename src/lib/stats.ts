@@ -1,4 +1,4 @@
-import { ACTIVE_STATUSES, DONE_STATUSES, type Funder, type Grant, type Status } from "./model";
+import { ACTIVE_STATUSES, DONE_STATUSES, isFor, type Funder, type Grant, type Status } from "./model";
 import { daysBetween, fromISO, toISO } from "./util";
 
 export function winRate(grants: Grant[]): number | null {
@@ -167,7 +167,7 @@ export function filterForReports(grants: Grant[], f: ReportFilters): Grant[] {
       (!f.year || String(grantYear(g)) === f.year) &&
       (!f.tag || g.fm.tags.includes(f.tag)) &&
       (!f.project || g.fm.project === f.project) &&
-      (!f.client || g.fm.client === f.client),
+      (!f.client || isFor(g.fm, f.client)),
   );
 }
 

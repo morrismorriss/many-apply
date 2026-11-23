@@ -1,7 +1,7 @@
 // Receives grants from the Chrome extension through the desktop app's local listener (127.0.0.1 only).
 import { isTauri } from "./platform";
 import { useStore } from "../store";
-import { STATUSES, type Status } from "./model";
+import { ME, STATUSES, type Status } from "./model";
 import { defaultGrantBody, setBodySection } from "./vault";
 import { slugify } from "./util";
 
@@ -18,7 +18,9 @@ export interface ExtensionGrant {
   deadline?: string;
   amount?: number | null;
   max_award?: number | null;
+  /** Old extension versions send one client; newer ones send a list. */
   client?: string;
+  clients?: string[];
 }
 
 export function newPairingCode(): string {
@@ -32,6 +34,19 @@ export async function syncPairingCode(code: string) {
   await invoke("bridge_set_code", { code });
 }
 
+/** Hand the vault's clients to the listener, so the extension can offer them. */
+async function syncClients(clients: { slug: string; name: string }[]) {
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("bridge_set_clients", { clients });
+}
+
+const clientList = () => {
+  const cs = useStore.getState().data?.clients ?? [];
+  const list = cs.map((c) => ({ slug: c.slug, name: c.fm.name }));
+  // "Me" always comes first, even before a vault has a clients/me.md.
+  return list.some((c) => c.slug === ME) ? [...list.filter((c) => c.slug === ME), ...list.filter((c) => c.slug !== ME)] : [{ slug: ME, name: "Me" }, ...list];
+};
+
 export async function startExtensionBridge(): Promise<() => void> {
   if (!isTauri) return () => {};
   const st = useStore.getState();
@@ -41,6 +56,18 @@ export async function startExtensionBridge(): Promise<() => void> {
     await st.updateSettings((s) => ({ ...s, pairingCode: code! }));
   }
   await syncPairingCode(code);
+  let lastClients = "";
+  const pushClients = () => {
+    const list = clientList();
+    const key = JSON.stringify(list);
+    if (key === lastClients) return;
+    lastClients = key;
+    void syncClients(list).catch(() => (lastClients = ""));
+  };
+  pushClients();
+  const unsubscribe = useStore.subscribe((st, prev) => {
+    if (st.data?.clients !== prev.data?.clients) pushClients();
+  });
   const { listen } = await import("@tauri-apps/api/event");
   const unlisten = await listen<ExtensionGrant>("extension-grant", async (e) => {
     const g = e.payload;
@@ -64,11 +91,22 @@ export async function startExtensionBridge(): Promise<() => void> {
         deadline: g.deadline ?? "",
         amount_requested: g.amount ?? null,
         max_award: g.max_award ?? null,
-        ...(g.client ? { client: g.client } : {}),
+        ...clientsFrom(g),
       },
       body,
     );
     s.toast(`Added from Chrome: ${created.fm.title}`, "ok", { label: "Open", run: () => s.openDrawer({ kind: "grant", id: created.folder }) });
   });
-  return unlisten;
+  return () => {
+    unsubscribe();
+    unlisten();
+  };
+}
+
+/** Who a grant from the extension is for. Unknown clients are dropped; nothing known leaves the default. */
+function clientsFrom(g: ExtensionGrant): { clients?: string[] } {
+  const known = new Set(clientList().map((c) => c.slug));
+  const asked = Array.isArray(g.clients) ? g.clients : g.client ? [g.client] : [];
+  const clients = [...new Set(asked.filter((c) => typeof c === "string" && known.has(c)))];
+  return clients.length ? { clients } : {};
 }

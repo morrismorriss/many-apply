@@ -1,5 +1,5 @@
 import { useStore } from "../store";
-import { ACTIVE_STATUSES, DONE_STATUSES } from "../lib/model";
+import { ACTIVE_STATUSES, DONE_STATUSES, isFor } from "../lib/model";
 import { fmtDate, fmtMoney, toISO } from "../lib/util";
 import { askText } from "../components/dialogs";
 
@@ -41,7 +41,7 @@ export function Clients() {
           </thead>
           <tbody>
             {clients.map((c) => {
-              const gs = grants.filter((g) => g.fm.client === c.slug);
+              const gs = grants.filter((g) => isFor(g.fm, c.slug));
               const next = gs
                 .filter((g) => g.fm.deadline >= today && !DONE_STATUSES.includes(g.fm.status))
                 .sort((a, b) => a.fm.deadline.localeCompare(b.fm.deadline))[0];

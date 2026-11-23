@@ -6,6 +6,7 @@ import {
   GRANT_TYPES,
   ME,
   STATUSES,
+  clientsOf,
   type Client,
   type Funder,
   type Grant,
@@ -25,7 +26,7 @@ import { mergeFeeds } from "./feeds";
 import { renameGrantReferences } from "./move";
 
 export const GRANT_ORDER = [
-  "title", "client", "funder", "url", "type", "status", "starred", "amount_requested", "amount_awarded",
+  "title", "client", "clients", "funder", "url", "type", "status", "starred", "amount_requested", "amount_awarded",
   "max_award", "currency", "deadline", "deadline_type", "project", "location", "tags", "submitted_on",
   "decision_expected", "decision_on", "todoist_task_ids", "reports", "no_reporting", "work_samples", "library_items", "documents", "created", "updated", "status_history", "time_log",
 ];
@@ -78,10 +79,15 @@ export function normalizeGrant(raw: Record<string, unknown>, folder: string): Gr
         .filter((h) => h && STATUSES.includes(h.status as Status))
         .map((h) => ({ status: h.status as Status, date: dateStr(h.date) }))
     : [];
+  // The main client comes first; "clients" lists anyone else it's for (older files only have "client").
+  const listed = asArray(raw.clients).map(slugOrMe);
+  const main = str(raw.client).trim() ? slugOrMe(raw.client) : listed[0] ?? ME;
+  const clients = [...new Set([main, ...listed])];
   const fm: GrantFM = {
     ...raw,
     title: str(raw.title) || folder,
-    client: slugOrMe(raw.client),
+    client: main,
+    clients,
     funder: str(raw.funder),
     url: str(raw.url),
     type,
@@ -126,6 +132,10 @@ function slugOrMe(v: unknown): string {
 
 function grantToYaml(fm: GrantFM): Record<string, unknown> {
   const out: Record<string, unknown> = { ...fm };
+  const clients = clientsOf(fm);
+  out.client = clients[0];
+  if (clients.length > 1) out.clients = clients;
+  else delete out.clients;
   out.reports = fm.reports.map((r) => ({
     title: r.title,
     due: r.due,

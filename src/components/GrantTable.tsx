@@ -1,8 +1,8 @@
 import { useState, type ReactNode } from "react";
 import { useLookups, useStore } from "../store";
 import type { Grant } from "../lib/model";
-import { STATUSES } from "../lib/model";
-import { ClientLabel, DeadlineText, StatusPill } from "./ui";
+import { STATUSES, clientsOf } from "../lib/model";
+import { ClientLabels, DeadlineText, StatusPill } from "./ui";
 import { fmtMoney } from "../lib/util";
 
 type Col = "title" | "funder" | "status" | "deadline" | "amount" | "client" | "type";
@@ -21,7 +21,7 @@ export function GrantTable({ grants, extra }: { grants: Grant[]; extra?: (g: Gra
       case "status": return STATUSES.indexOf(g.fm.status);
       case "deadline": return g.fm.deadline || "9999";
       case "amount": return g.fm.amount_awarded ?? g.fm.amount_requested ?? -1;
-      case "client": return clientName(g.fm.client).toLowerCase();
+      case "client": return clientsOf(g.fm).map(clientName).join(", ").toLowerCase();
       case "type": return g.fm.type;
     }
   };
@@ -69,7 +69,7 @@ export function GrantTable({ grants, extra }: { grants: Grant[]; extra?: (g: Gra
               <td className="soft">{funderName(g.fm.funder)}</td>
               {hasClients && (
                 <td>
-                  <ClientLabel slug={g.fm.client} />
+                  <ClientLabels fm={g.fm} />
                 </td>
               )}
               <td className="soft">{g.fm.type}</td>
