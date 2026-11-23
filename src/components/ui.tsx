@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { STATUS_LABEL, type Grant, type Status } from "../lib/model";
+import { STATUS_LABEL, clientsOf, type Grant, type Status } from "../lib/model";
 import { useLookups, useStore } from "../store";
 import { daysUntil, fmtDate, fmtMoney } from "../lib/util";
 import { askText } from "./dialogs";
@@ -28,6 +28,15 @@ export function ClientLabel({ slug, hideMe = false }: { slug: string; hideMe?: b
     <span className="label" style={{ ["--c" as string]: c?.fm.color || "#8a817c" }}>
       {clientName(slug)}
     </span>
+  );
+}
+
+/** One label per client a grant is for. */
+export function ClientLabels({ fm }: { fm: { client: string; clients?: unknown } }) {
+  return (
+    <>
+      {clientsOf(fm).map((c) => <ClientLabel key={c} slug={c} />)}
+    </>
   );
 }
 
@@ -97,7 +106,7 @@ export function GrantCard({ g, draggable, onDragStart, onDragEnd, dragging, foot
         {(g.fm.amount_requested ?? g.fm.max_award) !== null && (
           <span className="num">{fmtMoney(g.fm.amount_awarded ?? g.fm.amount_requested ?? g.fm.max_award, g.fm.currency, true)}</span>
         )}
-        <ClientLabel slug={g.fm.client} />
+        <ClientLabels fm={g.fm} />
       </div>
       {footer && (
         <div className="row" style={{ marginTop: 10, justifyContent: "flex-end" }} onClick={(e) => e.stopPropagation()}>

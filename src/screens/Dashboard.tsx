@@ -5,7 +5,7 @@ import { dashboardNumbers, needsAttention, statusCounts, type Attention } from "
 import { STATUSES, STATUS_LABEL } from "../lib/model";
 import { addDays, daysBetween, daysUntil, displayText, fmtDate, fmtMoney, fromISO, MONTH_NAMES, relDays, toISO } from "../lib/util";
 import { cssVar, dataColor, themeChartOptions } from "../lib/charts";
-import { ClientLabel, Empty, statusColor } from "../components/ui";
+import { ClientLabel, ClientLabels, Empty, statusColor } from "../components/ui";
 import { QuickAdd } from "../components/QuickAdd";
 import { documentOwner, expiryState } from "../lib/documents";
 
@@ -108,7 +108,7 @@ export function Dashboard() {
                       </span>
                       <div className="grow" style={{ minWidth: 0 }}>
                         <div className="ellipsis" style={{ fontWeight: 550 }}>
-                          {a.grant.fm.title} <ClientLabel slug={a.grant.fm.client} />
+                          {a.grant.fm.title} <ClientLabels fm={a.grant.fm} />
                         </div>
                         <div className="small soft">{a.text}</div>
                       </div>

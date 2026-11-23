@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useStore } from "../store";
 import {
-  ClientSelect,
+  ClientMultiSelect,
   FunderSelect,
   InlineDate,
   InlineNumber,
@@ -26,6 +26,7 @@ import {
   type GrantFM,
   type Question,
   type ReportDate,
+  clientsOf,
 } from "../lib/model";
 import { addQuestionToBody, bodySection, parseQuestions, readDraft, setBodySection, GRANT_ORDER } from "../lib/vault";
 import { budgetTotals, parseBudgetCsv } from "../lib/budget";
@@ -90,7 +91,7 @@ export function GrantDrawer({ folder }: { folder: string }) {
         <div className="props">
           <div className="k">For</div>
           <div className="v">
-            <ClientSelect value={f.client} onChange={(client) => set({ client })} />
+            <ClientMultiSelect value={clientsOf(f)} label="Add who it's for" onChange={(clients) => set({ client: clients[0], clients })} />
           </div>
           <div className="k">Funder</div>
           <div className="v">

@@ -1,6 +1,6 @@
 import { libraryBudgetName } from "../lib/budget";
 import { useStore } from "../store";
-import { CLIENT_TYPES, ME, type Client } from "../lib/model";
+import { CLIENT_TYPES, ME, isFor, type Client } from "../lib/model";
 import { fmtMoney } from "../lib/util";
 import { zipClient } from "../lib/backup";
 import { saveFile } from "../lib/platform";
@@ -8,7 +8,7 @@ import { InlineNumber, InlineText, StatusPill } from "./ui";
 
 export function ClientDrawer({ slug }: { slug: string }) {
   const client = useStore((s) => s.data?.clients.find((c) => c.slug === slug));
-  const grants = useStore((s) => s.data?.grants ?? []).filter((g) => g.fm.client === slug);
+  const grants = useStore((s) => s.data?.grants ?? []).filter((g) => isFor(g.fm, slug));
   const templates = useStore((s) => s.data?.budgetTemplates ?? []);
   const save = useStore((s) => s.saveClient);
   const open = useStore((s) => s.openDrawer);

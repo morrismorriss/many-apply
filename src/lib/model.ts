@@ -70,7 +70,10 @@ export interface StatusEvent {
 
 export interface GrantFM {
   title: string;
+  /** The main client: whose Library, budget template and Todoist project this application uses. Always clients[0]. */
   client: string;
+  /** Everyone this opportunity is for, main client first. Only written to the file when there's more than one. */
+  clients: string[];
   funder: string;
   url: string;
   type: GrantType;
@@ -252,3 +255,13 @@ export const DEFAULT_SETTINGS: Settings = {
 };
 
 export const ME = "me";
+
+/** Everyone a grant is for. Works for anything with a client, so it can be used by shared filters. */
+export function clientsOf(fm: { client: string; clients?: unknown }): string[] {
+  return Array.isArray(fm.clients) && fm.clients.length ? (fm.clients as string[]) : [fm.client];
+}
+
+/** Whether something belongs to a client: for grants, any of the clients it's for. */
+export function isFor(fm: { client: string; clients?: unknown }, slug: string): boolean {
+  return clientsOf(fm).includes(slug);
+}

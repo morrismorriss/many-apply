@@ -138,6 +138,7 @@ pub fn run() {
             open_file,
             fetch_feed,
             bridge::bridge_set_code,
+            bridge::bridge_set_clients,
             bridge::bridge_status
         ])
         .run(tauri::generate_context!())

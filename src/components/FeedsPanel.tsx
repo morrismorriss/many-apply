@@ -75,17 +75,11 @@ export function FeedsPanel() {
     try {
       const f = byId.get(i.feedId);
       const g = itemToGrant(i, f?.name ?? "a feed");
-      // One copy per client, since each is its own application.
-      let created: Awaited<ReturnType<typeof addGrant>> | null = null;
-      for (const client of saveFor) {
-        const c = await addGrant(
-          { title: g.title, url: g.url, deadline: g.deadline, max_award: g.max_award, status: "researching", client },
-          setBodySection(defaultGrantBody(), "Eligibility", g.eligibility),
-        );
-        created ??= c;
-      }
-      const first = created!;
-      toast(hasClients ? `Saved to Research for ${saveFor.map(clientName).join(", ")}` : "Saved to Research", "ok", { label: "Open", run: () => openDrawer({ kind: "grant", id: first.folder }) });
+      const created = await addGrant(
+        { title: g.title, url: g.url, deadline: g.deadline, max_award: g.max_award, status: "researching", clients: saveFor },
+        setBodySection(defaultGrantBody(), "Eligibility", g.eligibility),
+      );
+      toast(hasClients ? `Saved to Research for ${saveFor.map(clientName).join(", ")}` : "Saved to Research", "ok", { label: "Open", run: () => openDrawer({ kind: "grant", id: created.folder }) });
     } catch (e) {
       toast(`Couldn't save it: ${errorText(e)}`, "error");
       savingRef.current.delete(i.id);
