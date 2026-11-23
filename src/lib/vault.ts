@@ -27,7 +27,7 @@ import { renameGrantReferences } from "./move";
 export const GRANT_ORDER = [
   "title", "client", "funder", "url", "type", "status", "starred", "amount_requested", "amount_awarded",
   "max_award", "currency", "deadline", "deadline_type", "project", "location", "tags", "submitted_on",
-  "decision_expected", "decision_on", "todoist_task_ids", "reports", "work_samples", "library_items", "documents", "created", "updated", "status_history", "time_log",
+  "decision_expected", "decision_on", "todoist_task_ids", "reports", "no_reporting", "work_samples", "library_items", "documents", "created", "updated", "status_history", "time_log",
 ];
 const FUNDER_ORDER = ["name", "website", "funder_type", "contacts", "notes"];
 const CLIENT_ORDER = [
@@ -101,6 +101,7 @@ export function normalizeGrant(raw: Record<string, unknown>, folder: string): Gr
     decision_on: dateStr(raw.decision_on),
     todoist_task_ids: asArray(raw.todoist_task_ids),
     reports,
+    no_reporting: raw.no_reporting === true || raw.no_reporting === "true",
     work_samples: asArray(raw.work_samples),
     library_items: asArray(raw.library_items),
     documents: asArray(raw.documents),

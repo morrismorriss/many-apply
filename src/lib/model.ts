@@ -90,6 +90,8 @@ export interface GrantFM {
   decision_on: string;
   todoist_task_ids: string[];
   reports: ReportDate[];
+  /** The funder asks for no reports, so there's nothing to remind about. */
+  no_reporting: boolean;
   /** Work samples sent with this application, as paths relative to samples/. */
   work_samples: string[];
   /** Library answers attached to this application, as paths relative to library/. */

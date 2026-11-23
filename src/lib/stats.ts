@@ -68,7 +68,7 @@ export function needsAttention(grants: Grant[], today = new Date()): Attention[]
       const d = daysBetween(today, fromISO(r.due) ?? today);
       if (d <= 30) out.push({ kind: "report", grant: g, reportIndex: i, days: d, text: d < 0 ? `${r.title} overdue by ${-d} days` : `${r.title} due in ${d} days` });
     });
-    if (f.status === "awarded" && f.reports.length === 0) {
+    if (f.status === "awarded" && f.reports.length === 0 && !f.no_reporting) {
       out.push({ kind: "noreports", grant: g, text: "Got your reporting dates? Add them here." });
     }
   }

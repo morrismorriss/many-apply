@@ -665,3 +665,14 @@ describe("donor export", () => {
     expect(plan.entries[0].donor.fm).toMatchObject({ name: "Priya Raman", client: "lake", stage: "prospect" });
   });
 });
+
+describe("no reporting needed", () => {
+  it("stops asking for reporting dates once it's checked", () => {
+    const g = (raw: Record<string, unknown>) => ({ folder: "x", fm: normalizeGrantForTest({ title: "A", funder: "f", status: "awarded", ...raw }), body: "", lastEdited: 0 }) as never;
+    const asks = (x: never) => needsAttention([x], new Date("2026-11-23")).some((a) => a.kind === "noreports");
+    expect(asks(g({}))).toBe(true);
+    expect(asks(g({ no_reporting: true }))).toBe(false);
+    expect(normalizeGrantForTest({ title: "A", no_reporting: "true" }).no_reporting).toBe(true);
+    expect(normalizeGrantForTest({ title: "A" }).no_reporting).toBe(false);
+  });
+});
