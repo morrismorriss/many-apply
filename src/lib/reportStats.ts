@@ -2,7 +2,7 @@
 import type { Client, Grant } from "./model";
 import { grantYear } from "./stats";
 import { documentOwner, expiryState, type VaultDocument } from "./documents";
-import { looksLapsed, type Donor } from "./donors";
+import { giftsFor, looksLapsed, type Donor } from "./donors";
 import { fmtMinutes, fmtMoney, todayISO } from "./util";
 
 const yearOf = (iso: string) => (/^\d{4}/.test(iso) ? Number(iso.slice(0, 4)) : null);
@@ -23,7 +23,7 @@ export interface YearReview {
   newFunders: string[];
   topFunders: { slug: string; amount: number }[];
   minutes: number;
-  /** Individual gifts in the year (donors aren't split by client). */
+  /** Individual gifts in the year (to `client` when one is given). */
   gifts: { count: number; total: number; donors: number };
   reportsDue: number;
 }
@@ -31,7 +31,7 @@ export interface YearReview {
 const sentYear = (g: Grant) => yearOf(g.fm.submitted_on) ?? (["submitted", "awarded", "declined"].includes(g.fm.status) ? grantYear(g) : null);
 const decidedYear = (g: Grant) => yearOf(g.fm.decision_on) ?? sentYear(g);
 
-export function yearReview(grants: Grant[], donors: Donor[], year: number): YearReview {
+export function yearReview(grants: Grant[], donors: Donor[], year: number, client = ""): YearReview {
   const sent = grants.filter((g) => sentYear(g) === year);
   const decided = grants.filter((g) => ["awarded", "declined"].includes(g.fm.status) && decidedYear(g) === year);
   const won = decided.filter((g) => g.fm.status === "awarded");
@@ -39,7 +39,7 @@ export function yearReview(grants: Grant[], donors: Donor[], year: number): Year
   const earlierFunders = new Set(grants.filter((g) => (sentYear(g) ?? 9999) < year).map((g) => g.fm.funder));
   const byFunder = new Map<string, number>();
   for (const g of won) byFunder.set(g.fm.funder, (byFunder.get(g.fm.funder) ?? 0) + (g.fm.amount_awarded ?? 0));
-  const gifts = donors.flatMap((d) => d.fm.gifts.filter((x) => yearOf(x.date) === year).map((x) => ({ d: d.slug, amount: x.amount })));
+  const gifts = donors.flatMap((d) => giftsFor(d, client).filter((x) => yearOf(x.date) === year).map((x) => ({ d: d.slug, amount: x.amount })));
   return {
     year,
     submitted: sent.length,
@@ -146,12 +146,12 @@ export interface GivingReport {
   lapsed: number;
 }
 
-export function givingReport(donors: Donor[], year: number, today = todayISO()): GivingReport {
-  const giftsIn = (d: Donor, y: number) => d.fm.gifts.filter((g) => yearOf(g.date) === y);
+export function givingReport(donors: Donor[], year: number, today = todayISO(), client = ""): GivingReport {
+  const giftsIn = (d: Donor, y: number) => giftsFor(d, client).filter((g) => yearOf(g.date) === y);
   const gaveIn = (y: number) => new Set(donors.filter((d) => giftsIn(d, y).length).map((d) => d.slug));
   const now = gaveIn(year);
   const before = gaveIn(year - 1);
-  const firstYear = (d: Donor) => Math.min(...d.fm.gifts.map((g) => yearOf(g.date) ?? 9999));
+  const firstYear = (d: Donor) => Math.min(...giftsFor(d, client).map((g) => yearOf(g.date) ?? 9999));
   const thisYear = donors.flatMap((d) => giftsIn(d, year).map((g) => ({ ...g, d })));
   const methods = new Map<string, { total: number; count: number }>();
   for (const g of thisYear) {
@@ -161,7 +161,7 @@ export function givingReport(donors: Donor[], year: number, today = todayISO()):
   }
   const total = sum(thisYear.map((g) => g.amount));
   const years = Array.from({ length: 5 }, (_, i) => year - 4 + i);
-  const unthanked = donors.flatMap((d) => d.fm.gifts.filter((g) => !g.acknowledged));
+  const unthanked = donors.flatMap((d) => giftsFor(d, client).filter((g) => !g.acknowledged));
   return {
     year,
     byYear: years.map((y) => ({ year: y, total: sum(donors.flatMap((d) => giftsIn(d, y).map((g) => g.amount))), donors: gaveIn(y).size })),

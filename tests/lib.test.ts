@@ -603,35 +603,68 @@ describe("new reports", () => {
 });
 
 describe("donors by client", () => {
-  it("keeps who a donor gave to, defaulting to me", async () => {
-    const { normalizeDonor, donorsFor } = await import("../src/lib/donors");
+  it("keeps who a donor gives to (several allowed), reads 0.5.0 files, and splits gifts by client", async () => {
+    const { normalizeDonor, donorsFor, giftsFor, summarize, writeDonor, readDonor } = await import("../src/lib/donors");
     const a = normalizeDonor("a", { name: "A" }, "");
-    const b = normalizeDonor("b", { name: "B", client: "lakeside" }, "");
-    expect(a.fm.client).toBe("me");
-    expect(donorsFor([a, b], "lakeside").map((d) => d.slug)).toEqual(["b"]);
-    expect(donorsFor([a, b], "")).toHaveLength(2);
+    const legacy = normalizeDonor("b", { name: "B", client: "lakeside" }, "");
+    const both = normalizeDonor("c", {
+      name: "C",
+      gave_to: ["me", "lakeside"],
+      gifts: [{ date: "2026-02-01", amount: 100 }, { date: "2026-03-01", amount: 40, to: "lakeside" }],
+    }, "");
+    expect(a.fm.gave_to).toEqual(["me"]);
+    expect(legacy.fm.gave_to).toEqual(["lakeside"]);
+    expect("client" in legacy.fm).toBe(false);
+    expect(donorsFor([a, legacy, both], "lakeside").map((d) => d.slug)).toEqual(["b", "c"]);
+    expect(donorsFor([a, legacy, both], "me").map((d) => d.slug)).toEqual(["a", "c"]);
+    expect(giftsFor(both, "lakeside").map((g) => g.amount)).toEqual([40]);
+    expect(summarize(both, 2026, "me").lifetime).toBe(100);
+    expect(summarize(both, 2026).lifetime).toBe(140);
+    // A gift's "to" is written only when it differs from the first "gave to".
+    const fs = new MemoryFS();
+    await writeDonor(fs, both);
+    const text = await fs.readText("donors/c.md");
+    expect(text).toContain("gave_to: [me, lakeside]");
+    expect(text.match(/to: lakeside/g)).toHaveLength(1);
+    expect((await readDonor(fs, "donors/c.md")).fm.gifts.map((g) => g.to)).toEqual(["lakeside", ""]);
   });
 
-  it("imports to the chosen client and only merges with that client's donors", async () => {
+  it("imports to a client, merges with the same person, and adds the client to who they give to", async () => {
     const { autoDonorMapping, planDonorImport } = await import("../src/lib/donorImport");
-    const { normalizeDonor } = await import("../src/lib/donors");
+    const { normalizeDonor, giftTo } = await import("../src/lib/donors");
     const mine = normalizeDonor("jamie-rivera", { name: "Jamie Rivera", email: "jamie@example.org" }, "");
-    const { headers, rows } = readCsv(`Name,Email,Amount,Date,Gave to\nJamie Rivera,jamie@example.org,50,2026-06-01,\nSam Lee,sam@example.org,20,2026-06-02,Me\nPat Kim,pat@example.org,10,2026-06-03,Unknown Org\n`);
+    const { headers, rows } = readCsv(`Name,Email,Amount,Date,Gave to\nJamie Rivera,jamie@example.org,50,2026-06-01,\nSam Lee,sam@example.org,20,2026-06-02,Me; Lakeside Youth Theater\nPat Kim,pat@example.org,10,2026-06-03,Unknown Org\n`);
     const mapping = autoDonorMapping(headers);
     expect(mapping["Gave to"]).toBe("client");
     const clients = [{ slug: "me", name: "Me" }, { slug: "lakeside", name: "Lakeside Youth Theater" }];
     const plan = planDonorImport([mine], rows, { mapping, dateOrder: "us", client: "lakeside", clients });
     const by = (name: string) => plan.entries.find((e) => e.donor.fm.name === name)!;
-    // Jamie gave to Lakeside this time: a separate donor file, not merged into Jamie-who-gave-to-me.
-    expect(by("Jamie Rivera").isNew).toBe(true);
-    expect(by("Jamie Rivera").donor.fm.client).toBe("lakeside");
-    expect(by("Jamie Rivera").donor.slug).toBe("jamie-rivera-2");
-    // The column names a client: it wins. An unknown name falls back to the chosen client.
-    expect(by("Sam Lee").donor.fm.client).toBe("me");
-    expect(by("Pat Kim").donor.fm.client).toBe("lakeside");
-    // Importing the same file to "me" merges Jamie into the existing donor.
-    const again = planDonorImport([mine], rows.slice(0, 1), { mapping, dateOrder: "us", client: "me", clients });
-    expect(again.entries[0]).toMatchObject({ isNew: false, giftsAdded: 1 });
+    // Jamie is the same person: one file, now giving to both, and this gift counts for Lakeside.
+    expect(by("Jamie Rivera").isNew).toBe(false);
+    expect(by("Jamie Rivera").donor.fm.gave_to).toEqual(["me", "lakeside"]);
+    const jamie = by("Jamie Rivera").donor;
+    expect(giftTo(jamie, jamie.fm.gifts[0])).toBe("lakeside");
+    // A "Gave to" cell can name several clients; an unknown name falls back to the chosen client.
+    expect(by("Sam Lee").donor.fm.gave_to).toEqual(["me", "lakeside"]);
+    expect(by("Pat Kim").donor.fm.gave_to).toEqual(["lakeside"]);
+  });
+
+  it("keeps a history of donor imports that can be undone later", async () => {
+    const { autoDonorMapping, planDonorImport, applyDonorImport, saveDonorImportLog, listDonorImports, undoDonorImportLog } = await import("../src/lib/donorImport");
+    const { createDonor, readDonor } = await import("../src/lib/donors");
+    const fs = new MemoryFS();
+    const slug = await createDonor(fs, "Ruth Okafor");
+    const before = await fs.readText(`donors/${slug}.md`);
+    const { headers, rows } = readCsv(`Name,Amount,Date\nRuth Okafor,25,2026-06-01\nNew Person,10,2026-06-02\n`);
+    const existing = [await readDonor(fs, `donors/${slug}.md`)];
+    const plan = planDonorImport(existing, rows, { mapping: autoDonorMapping(headers), dateOrder: "us" });
+    const log = await saveDonorImportLog(fs, await applyDonorImport(fs, plan), { file: "paypal.csv", client: "me", plan });
+    const logs = await listDonorImports(fs);
+    expect(logs.map((l) => [l.file, l.createdCount, l.updatedCount, l.gifts, l.undone])).toEqual([["paypal.csv", 1, 1, 2, false]]);
+    await undoDonorImportLog(fs, log);
+    expect(await fs.readText(`donors/${slug}.md`)).toBe(before);
+    expect(await fs.exists("donors/new-person.md")).toBe(false);
+    expect((await listDonorImports(fs))[0].undone).toBe(true);
   });
 });
 
@@ -642,7 +675,7 @@ describe("donor export", () => {
     const { normalizeDonor, donorsFor } = await import("../src/lib/donors");
     const donors = [
       normalizeDonor("ruth", { name: "Ruth Okafor", email: "ruth@example.org", stage: "major", gifts: [{ date: "2026-10-01", amount: 2500, method: "Check", note: "Made Men, development", acknowledged: false }, { date: "2025-11-08", amount: 1500, method: "Check", acknowledged: true }] }, "Loves new plays.\n"),
-      normalizeDonor("priya", { name: "Priya Raman", client: "lake", stage: "prospect" }, ""),
+      normalizeDonor("priya", { name: "Priya Raman", gave_to: ["lake"], stage: "prospect" }, ""),
     ];
     const name = (s: string) => (s === "lake" ? "Lakeside Youth Theater" : "Me");
     const clients = [{ slug: "me", name: "Me" }, { slug: "lake", name: "Lakeside Youth Theater" }];
@@ -662,7 +695,7 @@ describe("donor export", () => {
     expect(people.rows).toHaveLength(1);
     expect(people.rows[0]).toMatchObject({ Name: "Priya Raman", "Gave to": "Lakeside Youth Theater", Stage: "prospect" });
     const plan = planDonorImport([], people.rows, { mapping: autoDonorMapping(people.headers), dateOrder: "us", clients });
-    expect(plan.entries[0].donor.fm).toMatchObject({ name: "Priya Raman", client: "lake", stage: "prospect" });
+    expect(plan.entries[0].donor.fm).toMatchObject({ name: "Priya Raman", gave_to: ["lake"], stage: "prospect" });
   });
 });
 

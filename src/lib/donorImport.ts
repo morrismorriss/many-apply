@@ -25,7 +25,7 @@ export const DONOR_FIELDS: DonorField[] = [
   { key: "address", label: "Address", hint: "Several columns are joined: street, city, state, zip" },
   { key: "organization", label: "Organization", hint: "Employer or company" },
   { key: "stage", label: "Stage", hint: "prospect, first-time, active, major, lapsed" },
-  { key: "client", label: "Gave to (client)", hint: "A client's name; other rows use the client you import to" },
+  { key: "client", label: "Gave to (client)", hint: "Client names, separated by ; for more than one. Other rows use the client you import to" },
   { key: "tags", label: "Tags", hint: "Comma- or semicolon-separated" },
   { key: "notes", label: "Notes", hint: "Added to the donor's notes" },
   { key: "gift_date", label: "Gift date", hint: "Any common date format" },
@@ -114,9 +114,9 @@ function cells(row: Record<string, string>, mapping: Record<string, string>, key
     .filter(Boolean);
 }
 
-// A person is matched within one client: someone who gives to two clients has a donor file for each.
-const keyFor = (client: string, email: string, name: string) =>
-  `${client}|` + (email ? `e:${email.toLowerCase()}` : `n:${name.trim().toLowerCase().replace(/\s+/g, " ")}`);
+// One person, one donor file: matched by email, or by name when there's no email. Giving to another client
+// adds that client to their "gave to" list.
+const keyFor = (email: string, name: string) => (email ? `e:${email.toLowerCase()}` : `n:${name.trim().toLowerCase().replace(/\s+/g, " ")}`);
 
 /** Whether any mapped date column holds a date like 3/4/2026 that reads differently day-first. */
 export function donorDatesAmbiguous(rows: Record<string, string>[], mapping: Record<string, string>): boolean {
@@ -128,17 +128,21 @@ export function planDonorImport(existing: Donor[], rows: Record<string, string>[
   const { mapping, dateOrder } = opts;
   const target = opts.client || ME;
   const norm = (x: string) => x.trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-  const clientFor = (raw: string) => {
-    if (!raw.trim()) return target;
-    const c = (opts.clients ?? []).find((c) => norm(c.name) === norm(raw) || c.slug === raw.trim().toLowerCase());
-    return c ? c.slug : target;
+  /** A "Gave to" cell can name several clients ("Me; Lakeside Youth Theater"). Unknown names fall back to the target. */
+  const clientsFor = (raw: string): string[] => {
+    const found = raw
+      .split(/[;,|]/)
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .map((part) => (opts.clients ?? []).find((c) => norm(c.name) === norm(part) || c.slug === part.toLowerCase())?.slug ?? target);
+    return found.length ? [...new Set(found)] : [target];
   };
   const byKey = new Map<string, DonorPlanEntry>();
   const taken = new Set(existing.map((d) => d.slug));
   for (const d of existing) {
     const entry = { donor: structuredClone(d), isNew: false, giftsAdded: 0 };
-    if (d.fm.email) byKey.set(keyFor(d.fm.client, d.fm.email, ""), entry);
-    if (!byKey.has(keyFor(d.fm.client, "", d.fm.name))) byKey.set(keyFor(d.fm.client, "", d.fm.name), entry);
+    if (d.fm.email) byKey.set(keyFor(d.fm.email, ""), entry);
+    if (!byKey.has(keyFor("", d.fm.name))) byKey.set(keyFor("", d.fm.name), entry);
   }
   const touched = new Set<DonorPlanEntry>();
   let duplicateGifts = 0;
@@ -155,21 +159,23 @@ export function planDonorImport(existing: Donor[], rows: Record<string, string>[
       skippedRows++;
       return;
     }
-    const client = clientFor(one("client"));
-    let entry = (email && byKey.get(keyFor(client, email, ""))) || (name && byKey.get(keyFor(client, "", name))) || undefined;
+    const rowClients = clientsFor(cells(row, mapping, "client").join("; "));
+    const client = rowClients[0];
+    let entry = (email && byKey.get(keyFor(email, ""))) || (name && byKey.get(keyFor("", name))) || undefined;
     if (!entry) {
       const base = slugify(name || email.split("@")[0]) || "donor";
       let slug = base;
       for (let n = 2; taken.has(slug); n++) slug = `${base}-${n}`;
       taken.add(slug);
-      const d = blankDonor(slug, name || email, client);
+      const d = blankDonor(slug, name || email, rowClients);
       d.fm.created = todayISO();
       entry = { donor: d, isNew: true, giftsAdded: 0 };
     }
-    if (email) byKey.set(keyFor(client, email, ""), entry);
-    if (name && !byKey.has(keyFor(client, "", name))) byKey.set(keyFor(client, "", name), entry);
+    if (email) byKey.set(keyFor(email, ""), entry);
+    if (name && !byKey.has(keyFor("", name))) byKey.set(keyFor("", name), entry);
     touched.add(entry);
     const fm = entry.donor.fm;
+    for (const c of rowClients) if (!fm.gave_to.includes(c)) fm.gave_to.push(c);
 
     // Fill in empty details only.
     if (name && (fm.name === fm.email || !fm.name)) fm.name = name;
@@ -204,7 +210,7 @@ export function planDonorImport(existing: Donor[], rows: Record<string, string>[
       }
       if (amount <= 0) return;
       const ack = one("acknowledged");
-      const gift: Gift = { date, amount, method: one("gift_method"), note: one("gift_note"), acknowledged: ack ? truthy(ack) : false };
+      const gift: Gift = { date, amount, method: one("gift_method"), note: one("gift_note"), acknowledged: ack ? truthy(ack) : false, to: client };
       if (fm.gifts.some((g) => g.date === gift.date && g.amount === gift.amount)) {
         duplicateGifts++;
         return;
@@ -264,4 +270,65 @@ export async function applyDonorImport(fs: VaultFS, plan: DonorPlan): Promise<Do
 export async function undoDonorImport(fs: VaultFS, r: DonorImportResult) {
   for (const slug of r.created) if (await fs.exists(`donors/${slug}.md`)) await trash(fs, `donors/${slug}.md`);
   for (const [slug, text] of Object.entries(r.originals)) await fs.writeText(`donors/${slug}.md`, text);
+}
+
+// ---------------------------------------------------------------- import history
+
+/** A saved record of one donor import, kept in .manyapply/imports/ so it can be undone later. */
+export interface DonorImportLog extends DonorImportResult {
+  id: string;
+  /** ISO date-time of the import. */
+  at: string;
+  file: string;
+  client: string;
+  createdCount: number;
+  updatedCount: number;
+  gifts: number;
+  undone: boolean;
+}
+
+const LOG_DIR = ".manyapply/imports";
+const logPath = (id: string) => `${LOG_DIR}/donors-${id}.json`;
+
+export async function saveDonorImportLog(
+  fs: VaultFS,
+  r: DonorImportResult,
+  meta: { file: string; client: string; plan: DonorPlan },
+  now = new Date(),
+): Promise<DonorImportLog> {
+  const id = now.toISOString().replace(/[:.]/g, "-");
+  const log: DonorImportLog = {
+    ...r,
+    id,
+    at: now.toISOString(),
+    file: meta.file,
+    client: meta.client,
+    createdCount: r.created.length,
+    updatedCount: Object.keys(r.originals).length,
+    gifts: meta.plan.gifts,
+    undone: false,
+  };
+  await fs.mkdir(LOG_DIR);
+  await fs.writeText(logPath(id), JSON.stringify(log, null, 2) + "\n");
+  return log;
+}
+
+/** Donor imports, newest first. */
+export async function listDonorImports(fs: VaultFS): Promise<DonorImportLog[]> {
+  const out: DonorImportLog[] = [];
+  for (const e of await fs.list(LOG_DIR)) {
+    if (e.isDir || !/\/donors-[^/]+\.json$/.test(e.path)) continue;
+    try {
+      out.push(JSON.parse(await fs.readText(e.path)) as DonorImportLog);
+    } catch {
+      /* a damaged log is skipped */
+    }
+  }
+  return out.sort((a, b) => b.at.localeCompare(a.at));
+}
+
+/** Undo a saved import and mark it undone. Donors it updated go back to how they were before it. */
+export async function undoDonorImportLog(fs: VaultFS, log: DonorImportLog) {
+  await undoDonorImport(fs, log);
+  await fs.writeText(logPath(log.id), JSON.stringify({ ...log, undone: true }, null, 2) + "\n");
 }

@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLookups, useStore } from "../store";
-import { askText } from "../components/dialogs";
-import { ClientSelect, Modal } from "../components/ui";
+import { askText, confirmAction } from "../components/dialogs";
+import { ClientSelect, MenuButton, Modal } from "../components/ui";
 import { readCsv, type ParsedCsv } from "../lib/csvImport";
 import {
   DONOR_FIELDS,
@@ -10,12 +10,15 @@ import {
   autoDonorMapping,
   donorDatesAmbiguous,
   planDonorImport,
-  undoDonorImport,
+  listDonorImports,
+  saveDonorImportLog,
+  undoDonorImportLog,
+  type DonorImportLog,
 } from "../lib/donorImport";
 import type { DateOrder } from "../lib/extract";
 import { errorText, pickFile, saveFile } from "../lib/platform";
 import { donorsCsv, giftsCsv } from "../lib/donorExport";
-import { DONOR_STAGES, DONOR_STAGE_LABEL, donorsFor, looksLapsed, summarize, type DonorStage } from "../lib/donors";
+import { DONOR_STAGES, DONOR_STAGE_LABEL, donorsFor, giftsFor, looksLapsed, summarize, writeDonor, type DonorStage } from "../lib/donors";
 import { ME } from "../lib/model";
 import { fmtDate, fmtMoney, slugify, todayISO } from "../lib/util";
 
@@ -53,13 +56,17 @@ export function Giving() {
   const toast = useStore((s) => s.toast);
   const [csv, setCsv] = useState<(ParsedCsv & { name: string }) | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [history, setHistory] = useState(false);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const mutate = useStore((s) => s.mutate);
   const today = todayISO();
   const year = new Date().getFullYear();
 
-  const rows = useMemo(() => donors.map((d) => ({ d, s: summarize(d, year) })), [donors, year]);
+  // With a client chosen in the sidebar, totals count only gifts to that client.
+  const rows = useMemo(() => donors.map((d) => ({ d, s: summarize(d, year, clientFilter) })), [donors, year, clientFilter]);
 
   const totals = useMemo(() => {
-    const giftsThisYear = rows.flatMap((r) => r.d.fm.gifts.filter((g) => g.date.startsWith(String(year))));
+    const giftsThisYear = rows.flatMap((r) => giftsFor(r.d, clientFilter).filter((g) => g.date.startsWith(String(year))));
     const raised = giftsThisYear.reduce((s, g) => s + g.amount, 0);
     const givers = rows.filter((r) => r.s.thisYear > 0).length;
     return {
@@ -69,7 +76,7 @@ export function Giving() {
       due: rows.filter((r) => r.d.fm.next_followup && r.d.fm.next_followup <= today).length,
       unthanked: rows.reduce((n, r) => n + r.s.unthanked, 0),
     };
-  }, [rows, year, today]);
+  }, [rows, year, today, clientFilter]);
 
   const shown = rows
     .filter(({ d, s }) => {
@@ -91,6 +98,27 @@ export function Giving() {
       return a.d.fm.name.localeCompare(b.d.fm.name);
     });
 
+  // Bulk "thanked": marks every unthanked gift (to the sidebar's client, if one is chosen) from the selected donors.
+  const selected = shown.filter(({ d }) => picked.has(d.slug)).map(({ d }) => d);
+  const toThank = selected.reduce((n, d) => n + giftsFor(d, clientFilter).filter((g) => !g.acknowledged).length, 0);
+  const markThanked = async () => {
+    const before = selected.map((d) => structuredClone(d));
+    const marking = new Set(selected.flatMap((d) => giftsFor(d, clientFilter).filter((g) => !g.acknowledged)));
+    const n = marking.size;
+    await mutate(async (fs) => {
+      for (const d of selected) await writeDonor(fs, { ...d, fm: { ...d.fm, gifts: d.fm.gifts.map((g) => (marking.has(g) ? { ...g, acknowledged: true } : g)) } });
+    });
+    setPicked(new Set());
+    toast(`Marked ${n} gift${n === 1 ? "" : "s"} thanked`, "ok", {
+      label: "Undo",
+      run: async () => {
+        await mutate(async (fs) => {
+          for (const d of before) await writeDonor(fs, d);
+        });
+      },
+    });
+  };
+
   const add = async () => {
     const name = await askText("New donor", { placeholder: "Full name" });
     if (name?.trim()) open({ kind: "donor", id: await addDonor(name.trim(), clientFilter || ME) });
@@ -111,6 +139,7 @@ export function Giving() {
     <div className="page wide">
       {exporting && <DonorExportDialog initialClient={clientFilter} onClose={() => setExporting(false)} />}
       {csv && <DonorImportDialog csv={csv} initialClient={clientFilter || ME} onClose={() => setCsv(null)} />}
+      {history && <ImportHistory onClose={() => setHistory(false)} />}
       <div className="page-head">
         <div>
           <h1>Individual Giving</h1>
@@ -120,9 +149,14 @@ export function Giving() {
         <button className="btn" disabled={allDonors.length === 0} onClick={() => setExporting(true)} title="Save donors or gifts as a spreadsheet">
           Export CSV…
         </button>
-        <button className="btn" onClick={() => void importCsv()} title="Donors and gifts from PayPal, Stripe, Givebutter or a spreadsheet">
-          Import CSV…
-        </button>
+        <MenuButton
+          label="Import ▾"
+          className="btn"
+          items={[
+            { label: "Import a CSV…", run: () => void importCsv() },
+            { label: "Past imports and undo…", run: () => setHistory(true) },
+          ]}
+        />
         <button className="btn primary" onClick={add}>
           + New donor
         </button>
@@ -163,11 +197,34 @@ export function Giving() {
               <option value="last">Sort: most recent gift</option>
             </select>
             <span className="muted small">{shown.length} of {donors.length}</span>
+            {selected.length > 0 && (
+              <>
+                <span className="grow" />
+                <span className="small soft">{selected.length} selected</span>
+                <button
+                  className="btn small primary"
+                  disabled={toThank === 0}
+                  title={toThank ? `Marks ${toThank} gift${toThank === 1 ? "" : "s"} as thanked` : "Every gift from these donors is already marked thanked"}
+                  onClick={() => void markThanked()}
+                >
+                  Mark thanked{toThank ? ` (${toThank})` : ""}
+                </button>
+                <button className="btn small ghost" onClick={() => setPicked(new Set())}>Clear</button>
+              </>
+            )}
           </div>
           <div className="table-wrap">
             <table className="table">
               <thead>
                 <tr>
+                  <th style={{ width: 28 }}>
+                    <input
+                      type="checkbox"
+                      aria-label="Select all"
+                      checked={shown.length > 0 && shown.every(({ d }) => picked.has(d.slug))}
+                      onChange={(e) => setPicked(e.target.checked ? new Set(shown.map(({ d }) => d.slug)) : new Set())}
+                    />
+                  </th>
                   <th>Name</th>
                   {showGaveTo && <th>Gave to</th>}
                   <th>Stage</th>
@@ -182,11 +239,24 @@ export function Giving() {
                   const due = d.fm.next_followup && d.fm.next_followup <= today;
                   return (
                     <tr key={d.slug} className="click" onClick={() => open({ kind: "donor", id: d.slug })}>
+                      <td onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${d.fm.name}`}
+                          checked={picked.has(d.slug)}
+                          onChange={(e) => {
+                            const next = new Set(picked);
+                            if (e.target.checked) next.add(d.slug);
+                            else next.delete(d.slug);
+                            setPicked(next);
+                          }}
+                        />
+                      </td>
                       <td>
                         <div style={{ fontWeight: 550 }}>{d.fm.name}</div>
                         {(d.fm.organization || d.fm.email) && <div className="muted small">{d.fm.organization || d.fm.email}</div>}
                       </td>
-                      {showGaveTo && <td className="soft small">{clientName(d.fm.client)}</td>}
+                      {showGaveTo && <td className="soft small">{d.fm.gave_to.map(clientName).join(", ")}</td>}
                       <td>
                         <StagePill stage={d.fm.stage} />
                         {d.fm.stage !== "lapsed" && looksLapsed(d, today) && <span className="muted small"> · no gift in 18 mo</span>}
@@ -257,12 +327,12 @@ function DonorImportDialog({ csv, initialClient, onClose }: { csv: ParsedCsv & {
   const run = async () => {
     setBusy(true);
     try {
-      const r = await mutate((fs) => applyDonorImport(fs, plan));
+      const log = await mutate(async (fs) => saveDonorImportLog(fs, await applyDonorImport(fs, plan), { file: csv.name, client, plan }));
       onClose();
-      toast(`Imported: ${plan.created} new, ${plan.updated} updated, ${plan.gifts} gift${plan.gifts === 1 ? "" : "s"}`, "ok", {
+      toast(`Imported: ${plan.created} new, ${plan.updated} updated, ${plan.gifts} gift${plan.gifts === 1 ? "" : "s"}. Undo it any time from Import → Past imports.`, "ok", {
         label: "Undo",
         run: async () => {
-          await mutate((fs) => undoDonorImport(fs, r));
+          await mutate((fs) => undoDonorImportLog(fs, log));
         },
       });
     } catch (e) {
@@ -291,8 +361,8 @@ function DonorImportDialog({ csv, initialClient, onClose }: { csv: ParsedCsv & {
       </div>
       <p className="soft small" style={{ marginTop: 0 }}>
         One row can be a person, a gift, or both. Rows with the same email (or the same name, if there's no email) are merged, and so are
-        {" "}{clientName(client)}'s donors you already have. Details you've already filled in are never overwritten. A "Gave to" column, if your
-        file has one, sends each row to the client it names.
+        donors you already have: they keep one file, and {clientName(client)} is added to who they give to. Details you've already filled in
+        are never overwritten. A "Gave to" column, if your file has one, sends each row to the clients it names (separate several with ;).
       </p>
       <div className="table-wrap" style={{ maxHeight: 320, overflow: "auto" }}>
         <table className="table">
@@ -365,7 +435,7 @@ function DonorExportDialog({ initialClient, onClose }: { initialClient: string; 
   const count = kind === "donors" ? donors.length : gifts;
 
   const run = async () => {
-    const text = kind === "donors" ? donorsCsv(donors, clientName) : giftsCsv(donors, clientName);
+    const text = kind === "donors" ? donorsCsv(donors, clientName, undefined, who) : giftsCsv(donors, clientName, who);
     const name = `${kind}-${who ? slugify(clientName(who)) : "all-clients"}-${todayISO()}.csv`;
     try {
       const p = await saveFile(name, text, "text/csv");
@@ -424,6 +494,66 @@ function DonorExportDialog({ initialClient, onClose }: { initialClient: string; 
           Sheets, and Many Apply's CSV import reads it back.
         </p>
       </div>
+    </Modal>
+  );
+}
+
+function ImportHistory({ onClose }: { onClose: () => void }) {
+  const fs = useStore((s) => s.fs!);
+  const mutate = useStore((s) => s.mutate);
+  const toast = useStore((s) => s.toast);
+  const { clientName } = useLookups();
+  const [logs, setLogs] = useState<DonorImportLog[] | null>(null);
+  const load = () => void listDonorImports(fs).then(setLogs).catch(() => setLogs([]));
+  useEffect(load, [fs]);
+
+  const undo = async (log: DonorImportLog) => {
+    const ok = await confirmAction(
+      `Undo the import of ${log.file}?`,
+      `${log.createdCount} donor${log.createdCount === 1 ? "" : "s"} it added go to trash, and ${log.updatedCount} it updated go back to how they were before it. Changes made to those donors since the import are lost.`,
+      { okLabel: "Undo import", danger: true },
+    );
+    if (!ok) return;
+    try {
+      await mutate((v) => undoDonorImportLog(v, log));
+      toast(`Undid the import of ${log.file}`);
+      load();
+    } catch (e) {
+      toast(`Couldn't undo it: ${errorText(e)}`, "error");
+    }
+  };
+
+  return (
+    <Modal title="Past donor imports" width={620} onClose={onClose} actions={<button className="btn" onClick={onClose}>Done</button>}>
+      {logs === null ? (
+        <p className="muted">Loading…</p>
+      ) : logs.length === 0 ? (
+        <p className="muted">No donor imports yet.</p>
+      ) : (
+        <div className="table-wrap" style={{ maxHeight: 380, overflow: "auto" }}>
+          <table className="table">
+            <thead>
+              <tr><th>When</th><th>File</th><th>For</th><th className="r">Added</th><th className="r">Updated</th><th className="r">Gifts</th><th /></tr>
+            </thead>
+            <tbody>
+              {logs.map((l) => (
+                <tr key={l.id}>
+                  <td className="small" style={{ whiteSpace: "nowrap" }}>{new Date(l.at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</td>
+                  <td className="small ellipsis" style={{ maxWidth: 160 }}>{l.file}</td>
+                  <td className="small soft">{clientName(l.client)}</td>
+                  <td className="r num">{l.createdCount}</td>
+                  <td className="r num">{l.updatedCount}</td>
+                  <td className="r num">{l.gifts}</td>
+                  <td className="r">
+                    {l.undone ? <span className="muted small">Undone</span> : <button className="btn small" onClick={() => void undo(l)}>Undo</button>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="muted small" style={{ marginBottom: 0 }}>Kept in <code>.manyapply/imports/</code> in your vault.</p>
     </Modal>
   );
 }
