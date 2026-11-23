@@ -4,8 +4,8 @@ import { TimerChip } from "./ui";
 import { useNewFeedCount } from "./FeedsPanel";
 import { useFeeds } from "../lib/feedStore";
 
-// Ordered by what you're doing: your day, applications, the material you reuse, the people and money,
-// then looking back and setting up.
+// Ordered by what you're doing: your day and who you're working for, applications, the material you
+// reuse, funders and donors, then looking back and setting up.
 /** Books on a shelf, drawn in the text colour so it matches the symbol icons. */
 const LibraryIcon = (
   <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" style={{ display: "block", margin: "0 auto" }}>
@@ -18,13 +18,13 @@ const LibraryIcon = (
 
 const NAV: { id: ScreenId; label: string; icon: ReactNode }[] = [
   { id: "dashboard", label: "Dashboard", icon: "◧" },
+  { id: "clients", label: "Clients", icon: "☺" },
   { id: "research", label: "Research", icon: "⌕" },
   { id: "pipeline", label: "Pipeline", icon: "▥" },
   { id: "calendar", label: "Calendar", icon: "▦" },
   { id: "library", label: "Library", icon: LibraryIcon },
   { id: "cv", label: "CV", icon: "✎" },
   { id: "funders", label: "Funders", icon: "⌂" },
-  { id: "clients", label: "Clients", icon: "☺" },
   { id: "giving", label: "Individual Giving", icon: "♡" },
   { id: "reports", label: "Reports", icon: "▤" },
   { id: "import", label: "Import", icon: "⇪" },

@@ -705,3 +705,33 @@ describe("Library budget names", () => {
     expect(libraryBudgetName("staged-reading.csv")).toBe("Staged reading");
   });
 });
+
+describe("CV: freelance grant writing", () => {
+  it("puts awards won for clients on my CV, and only a client's own awards on theirs", async () => {
+    const { blankCv, syncAwards, removeEntry, leftOffAwards, FREELANCE_SECTION } = await import("../src/lib/cv");
+    const g = (folder: string, raw: Record<string, unknown>) => ({ folder, fm: normalizeGrantForTest({ funder: "pca", status: "awarded", deadline: "2026-03-01", ...raw }), body: "", lastEdited: 0 }) as never;
+    const grants = [
+      g("a", { title: "Project Grant", client: "me" }),
+      g("b", { title: "Arts Education Grant", client: "lake", amount_awarded: 12000 }),
+      g("c", { title: "Capacity Grant", client: "lake", status: "declined" }),
+    ];
+    const funder = () => "Pennsylvania Council on the Arts";
+    const client = (s: string) => (s === "lake" ? "Lakeside Youth Theater" : "Me");
+
+    let mine = syncAwards(blankCv("me", "Jamie"), grants, funder, client);
+    const free = mine.sections.find((s) => s.title === FREELANCE_SECTION)!;
+    expect(free.entries.map((e) => e.text)).toEqual(["Arts Education Grant, Pennsylvania Council on the Arts, for Lakeside Youth Theater ($12,000)"]);
+    expect(mine.sections.find((s) => s.title === "Grants and awards")!.entries.map((e) => e.text)).toEqual(["Project Grant, Pennsylvania Council on the Arts"]);
+
+    // Taking one off works the same as any award.
+    mine = removeEntry(mine, mine.sections.indexOf(free), 0);
+    mine = syncAwards(mine, grants, funder, client);
+    expect(mine.sections.find((s) => s.title === FREELANCE_SECTION)!.entries).toHaveLength(0);
+    expect(leftOffAwards(mine, grants).map((x) => x.fm.title)).toEqual(["Arts Education Grant"]);
+
+    // The client's own CV lists it as their grant, with no Freelance section.
+    const theirs = syncAwards(blankCv("lake", "Lakeside"), grants, funder, client);
+    expect(theirs.sections.some((s) => s.title === FREELANCE_SECTION)).toBe(false);
+    expect(theirs.sections.flatMap((s) => s.entries).map((e) => e.text)).toEqual(["Arts Education Grant, Pennsylvania Council on the Arts"]);
+  });
+});

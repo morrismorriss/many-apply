@@ -80,10 +80,10 @@ export function CvBuilder() {
   const loadedFor = cv?.client ?? null;
   useEffect(() => {
     if (!cv) return;
-    const next = syncAwards(cv, grants, funderName);
+    const next = syncAwards(cv, grants, funderName, clientName);
     if (next !== cv) setCv(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadedFor, grants, funders]);
+  }, [loadedFor, grants, funders, clients]);
 
   if (!cv) return <div className="page"><p className="muted">Loading…</p></div>;
 
@@ -239,7 +239,7 @@ export function CvBuilder() {
             </div>
           ))}
 
-          <LeftOff cv={cv} onAddBack={(folder) => setCv(addAwardBack(cv, folder, grants, funderName))} />
+          <LeftOff cv={cv} onAddBack={(folder) => setCv(addAwardBack(cv, folder, grants, funderName, clientName))} />
 
           <div>
             <MenuButton
@@ -370,7 +370,7 @@ function FillDialog({ cv, onApply, onClose }: { cv: Cv; onApply: (cv: Cv) => voi
 
 function LeftOff({ cv, onAddBack }: { cv: Cv; onAddBack: (folder: string) => void }) {
   const grants = useStore((s) => s.data!.grants);
-  const { funderName } = useLookups();
+  const { funderName, clientName } = useLookups();
   const off = leftOffAwards(cv, grants);
   if (!off.length) return null;
   return (
@@ -379,7 +379,7 @@ function LeftOff({ cv, onAddBack }: { cv: Cv; onAddBack: (folder: string) => voi
       <p className="muted small" style={{ marginTop: 0 }}>Awarded applications you removed. They stay off until you add them back.</p>
       <div className="stack" style={{ gap: 6 }}>
         {off.map((g) => {
-          const a = awardEntry(g, funderName);
+          const a = awardEntry(g, funderName, clientName, cv.client);
           return (
             <div key={g.folder} className="row">
               <span className="muted num" style={{ width: 48 }}>{a.entry.year}</span>

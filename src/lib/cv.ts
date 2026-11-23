@@ -20,7 +20,7 @@ import type { Grant } from "./model";
 import { ME } from "./model";
 import type { WorkSample } from "./samples";
 import { para, packDocx, inlineRuns, run } from "./reviewExport";
-import { asArray, str } from "./util";
+import { asArray, fmtMoney, str } from "./util";
 
 export interface CvEntry {
   year: string;
@@ -57,6 +57,7 @@ export const CV_SECTIONS = [
   "Exhibitions",
   "Publications",
   "Commissions",
+  "Freelance grant writing",
   "Teaching",
   "Press",
 ] as const;
@@ -166,23 +167,42 @@ export interface CvSuggestion {
   entry: CvEntry;
 }
 
-/** The CV line for an awarded application, and the section it belongs in. */
-export function awardEntry(g: Grant, funderName: (slug: string) => string): CvSuggestion {
+/** Where grants you wrote for clients go on your own CV. */
+export const FREELANCE_SECTION = "Freelance grant writing";
+
+/**
+ * The CV line for an awarded application, and the section it belongs in. An award you won for a client
+ * goes under Freelance grant writing on your own CV, with who it was for and how much it brought in.
+ */
+export function awardEntry(
+  g: Grant,
+  funderName: (slug: string) => string,
+  clientName: (slug: string) => string = (x) => x,
+  /** Whose CV the line is for. A client's own award is an ordinary grant on their CV. */
+  cvClient: string = ME,
+): CvSuggestion {
   const funder = funderName(g.fm.funder);
   const titleHasFunder = funder && norm(g.fm.title).includes(norm(funder));
-  const text = titleHasFunder || !funder ? g.fm.title : `${g.fm.title}, ${funder}`;
+  const base = titleHasFunder || !funder ? g.fm.title : `${g.fm.title}, ${funder}`;
+  const client = g.fm.client || ME;
+  if (client !== ME && (cvClient || ME) === ME) {
+    const amount = g.fm.amount_awarded ? ` (${fmtMoney(g.fm.amount_awarded, g.fm.currency)})` : "";
+    return { section: FREELANCE_SECTION, entry: { year: yearOf(g), text: `${base}, for ${clientName(client)}${amount}`, source: `grant:${g.folder}` } };
+  }
   const section = g.fm.type === "residency" || g.fm.type === "fellowship" ? "Residencies and fellowships" : "Grants and awards";
-  return { section, entry: { year: yearOf(g), text, source: `grant:${g.folder}` } };
+  return { section, entry: { year: yearOf(g), text: base, source: `grant:${g.folder}` } };
 }
 
-const awardedFor = (cv: Cv, grants: Grant[]) => grants.filter((g) => (g.fm.client || ME) === (cv.client || ME) && g.fm.status === "awarded");
+/** A client's CV gets their own awards; yours also gets every award you won for a client. */
+const awardedFor = (cv: Cv, grants: Grant[]) =>
+  grants.filter((g) => g.fm.status === "awarded" && ((cv.client || ME) === ME || (g.fm.client || ME) === (cv.client || ME)));
 
 /**
  * Keep the CV in step with awarded applications: add any that aren't on it (unless they were taken off),
  * and drop ones that are no longer awarded, unless their wording was changed by hand. Entries typed by hand
  * that match an award are linked to it rather than duplicated. Returns the same object when nothing changed.
  */
-export function syncAwards(cv: Cv, grants: Grant[], funderName: (slug: string) => string): Cv {
+export function syncAwards(cv: Cv, grants: Grant[], funderName: (slug: string) => string, clientName?: (slug: string) => string): Cv {
   const awarded = awardedFor(cv, grants);
   const byFolder = new Map(grants.map((g) => [g.folder, g]));
   let changed = false;
@@ -201,10 +221,10 @@ export function syncAwards(cv: Cv, grants: Grant[], funderName: (slug: string) =
       changed = true;
       if (g) {
         // No longer awarded: drop it if it still reads as Many Apply wrote it, else keep it as the user's own.
-        return norm(awardEntry(g, funderName).entry.text) === norm(e.text) ? [] : [{ year: e.year, text: e.text }];
+        return norm(awardEntry(g, funderName, clientName, cv.client).entry.text) === norm(e.text) ? [] : [{ year: e.year, text: e.text }];
       }
       // The application was renamed (its folder follows the deadline and funder) or deleted.
-      const renamed = awarded.find((x) => !linked.has(x.folder) && norm(awardEntry(x, funderName).entry.text) === norm(e.text));
+      const renamed = awarded.find((x) => !linked.has(x.folder) && norm(awardEntry(x, funderName, clientName, cv.client).entry.text) === norm(e.text));
       if (renamed) {
         linked.add(renamed.folder);
         return [{ ...e, source: `grant:${renamed.folder}` }];
@@ -218,7 +238,7 @@ export function syncAwards(cv: Cv, grants: Grant[], funderName: (slug: string) =
   const touched = new Set<string>();
   for (const g of awarded) {
     if (linked.has(g.folder) || leftOff.includes(g.folder)) continue;
-    const want = awardEntry(g, funderName);
+    const want = awardEntry(g, funderName, clientName, cv.client);
     // A matching line typed by hand (or added before awards were automatic): link it instead of adding another.
     const match = sections.flatMap((s) => s.entries).find((e) => !e.source && (norm(e.text) === norm(want.entry.text) || norm(e.text).startsWith(norm(g.fm.title))));
     if (match) {
@@ -255,8 +275,8 @@ export function removeEntry(cv: Cv, sectionIndex: number, entryIndex: number): C
 }
 
 /** Put a left-off award back on the CV. */
-export function addAwardBack(cv: Cv, folder: string, grants: Grant[], funderName: (slug: string) => string): Cv {
-  return syncAwards({ ...cv, leftOff: cv.leftOff.filter((f) => f !== folder) }, grants, funderName);
+export function addAwardBack(cv: Cv, folder: string, grants: Grant[], funderName: (slug: string) => string, clientName?: (slug: string) => string): Cv {
+  return syncAwards({ ...cv, leftOff: cv.leftOff.filter((f) => f !== folder) }, grants, funderName, clientName);
 }
 
 /** Awarded applications taken off this CV, for the "Add back" list. */
