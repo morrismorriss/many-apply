@@ -1,6 +1,6 @@
 [package]
 name = "many-apply"
-version = "0.4.1"
+version = "0.5.0"
 description = "Research, track and write grants. Local-first."
 authors = ["Many Apply contributors"]
 license = "MIT"
