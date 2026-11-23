@@ -4,8 +4,8 @@ import { TimerChip } from "./ui";
 import { useNewFeedCount } from "./FeedsPanel";
 import { useFeeds } from "../lib/feedStore";
 
-// Grouped by what you're doing: your day, applications, the material you reuse, the people and money,
-// then looking back and setting up. A small gap separates the groups.
+// Ordered by what you're doing: your day, applications, the material you reuse, the people and money,
+// then looking back and setting up.
 /** Books on a shelf, drawn in the text colour so it matches the symbol icons. */
 const LibraryIcon = (
   <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" style={{ display: "block", margin: "0 auto" }}>
@@ -16,17 +16,17 @@ const LibraryIcon = (
   </svg>
 );
 
-const NAV: { id: ScreenId; label: string; icon: ReactNode; groupStart?: boolean }[] = [
+const NAV: { id: ScreenId; label: string; icon: ReactNode }[] = [
   { id: "dashboard", label: "Dashboard", icon: "◧" },
-  { id: "research", label: "Research", icon: "⌕", groupStart: true },
+  { id: "research", label: "Research", icon: "⌕" },
   { id: "pipeline", label: "Pipeline", icon: "▥" },
   { id: "calendar", label: "Calendar", icon: "▦" },
-  { id: "library", label: "Library", icon: LibraryIcon, groupStart: true },
+  { id: "library", label: "Library", icon: LibraryIcon },
   { id: "cv", label: "CV", icon: "✎" },
-  { id: "funders", label: "Funders", icon: "⌂", groupStart: true },
+  { id: "funders", label: "Funders", icon: "⌂" },
   { id: "clients", label: "Clients", icon: "☺" },
   { id: "giving", label: "Individual Giving", icon: "♡" },
-  { id: "reports", label: "Reports", icon: "▤", groupStart: true },
+  { id: "reports", label: "Reports", icon: "▤" },
   { id: "import", label: "Import", icon: "⇪" },
   { id: "settings", label: "Settings", icon: "⚙" },
 ];
@@ -87,7 +87,7 @@ export function Sidebar() {
         ))}
       </select>
       {NAV.map((n) => (
-        <button key={n.id} className={`nav-item${current === n.id ? " active" : ""}${n.groupStart ? " group-start" : ""}`} onClick={() => go({ screen: n.id })}>
+        <button key={n.id} className={`nav-item${current === n.id ? " active" : ""}`} onClick={() => go({ screen: n.id })}>
           <span className="icon" aria-hidden>
             {n.icon}
           </span>

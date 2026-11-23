@@ -419,7 +419,6 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 20px 0; }
 .lib-tabs { margin: -8px 0 16px; }
 
 /* Opportunity feeds */
-.nav-item.group-start { margin-top: 10px; }
 .nav-item .count.new { background: var(--accent); color: #fff; border-radius: 999px; padding: 0 7px; font-size: 11px; line-height: 18px; }
 .feed-item { padding: 10px 12px; }
 .feed-title { font-weight: 550; line-height: 1.35; color: var(--text); text-decoration: none; }
