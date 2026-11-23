@@ -473,27 +473,80 @@ describe("CV builder", () => {
     expect(parseCv(stringifyCv(cv), "me", "Me")).toEqual(cv);
   });
 
-  it("suggests awarded grants and work samples not yet on the CV, and builds a docx", async () => {
-    const { blankCv, cvSuggestions, applySuggestions, buildCvDocx, cvText } = await import("../src/lib/cv");
+  it("adds awarded applications by itself, remembers ones taken off, and can add them back", async () => {
+    const { blankCv, syncAwards, removeEntry, addAwardBack, leftOffAwards, stringifyCv, parseCv, buildCvDocx, cvText } = await import("../src/lib/cv");
+    const { loadVault, saveGrant } = await import("../src/lib/vault");
     const fs = new MemoryFS();
     await fs.writeText("clients/me.md", "---\nname: Me\n---\n");
     await createGrant(fs, { title: "Project Grant", funder: "pittsburgh-foundation", deadline: "2026-03-01", status: "awarded", amount_awarded: 5000, decision_on: "2026-05-01" } as never);
     await createGrant(fs, { title: "Hambidge Residency", funder: "hambidge", deadline: "2025-09-01", status: "awarded", type: "residency" } as never);
     await createGrant(fs, { title: "Lost one", funder: "x", deadline: "2026-01-01", status: "declined" } as never);
-    const { loadVault } = await import("../src/lib/vault");
-    const data = await loadVault(fs);
-    const cv = blankCv("me", "Jamie");
-    cv.sections[0].entries.push({ year: "2024", text: "Project Grant, Pittsburgh Foundation" });
-    const name = (s: string) => (s === "pittsburgh-foundation" ? "Pittsburgh Foundation" : "Hambidge Center");
-    const sugs = cvSuggestions(cv, data.grants, [], name, { amounts: true });
-    expect(sugs).toEqual([{ section: "Residencies and fellowships", entry: { year: "2025", text: "Hambidge Residency, Hambidge Center" } }]);
-    const next = applySuggestions(cv, sugs);
-    expect(cvText(next)).toContain("2025  Hambidge Residency, Hambidge Center");
-    const bytes = await buildCvDocx(next);
+    let data = await loadVault(fs);
+    const name = (s: string) => (s === "pittsburgh-foundation" ? "Pittsburgh Foundation" : s === "hambidge" ? "Hambidge Center" : s);
+
+    // A line typed by hand before awards were automatic is linked, not duplicated.
+    const start = blankCv("me", "Jamie");
+    start.sections[1].entries.push({ year: "2026", text: "Project Grant, Pittsburgh Foundation" });
+    let cv = syncAwards(start, data.grants, name);
+    const grantsSec = cv.sections.find((x) => x.title === "Grants and awards")!;
+    const resSec = cv.sections.find((x) => x.title === "Residencies and fellowships")!;
+    expect(grantsSec.entries).toHaveLength(1);
+    expect(grantsSec.entries[0].source).toMatch(/^grant:/);
+    expect(resSec.entries.map((e) => e.text)).toEqual(["Hambidge Residency, Hambidge Center"]);
+    expect(syncAwards(cv, data.grants, name)).toBe(cv); // nothing more to do
+
+    // The link survives the file round trip.
+    expect(parseCv(stringifyCv(cv), "me", "Me").sections).toEqual(cv.sections);
+
+    // Removing an award leaves it off, even after another sync, until it's added back.
+    const ri = cv.sections.indexOf(resSec);
+    cv = removeEntry(cv, ri, 0);
+    expect(cv.leftOff).toHaveLength(1);
+    cv = syncAwards(cv, data.grants, name);
+    expect(cv.sections[ri].entries).toHaveLength(0);
+    expect(leftOffAwards(cv, data.grants).map((g) => g.fm.title)).toEqual(["Hambidge Residency"]);
+    expect(parseCv(stringifyCv(cv), "me", "Me").leftOff).toEqual(cv.leftOff);
+    cv = addAwardBack(cv, cv.leftOff[0], data.grants, name);
+    expect(cv.leftOff).toEqual([]);
+    expect(cv.sections[ri].entries.map((e) => e.text)).toEqual(["Hambidge Residency, Hambidge Center"]);
+
+    // An application that's no longer awarded comes off, unless its wording was edited by hand.
+    const hambidge = data.grants.find((g) => g.fm.title === "Hambidge Residency")!;
+    await saveGrant(fs, { ...hambidge, fm: { ...hambidge.fm, status: "declined" } });
+    const project = data.grants.find((g) => g.fm.title === "Project Grant")!;
+    data = await loadVault(fs);
+    const gi = cv.sections.findIndex((x) => x.title === "Grants and awards");
+    cv.sections[gi].entries[0] = { ...cv.sections[gi].entries[0], text: "Project Grant, Pittsburgh Foundation ($5,000)" };
+    await saveGrant(fs, { ...project, fm: { ...project.fm, status: "submitted" } });
+    data = await loadVault(fs);
+    cv = syncAwards(cv, data.grants, name);
+    expect(cv.sections[ri].entries).toHaveLength(0);
+    expect(cv.sections[gi].entries).toEqual([{ year: "2026", text: "Project Grant, Pittsburgh Foundation ($5,000)" }]);
+
+    expect(cvText(cv)).toContain("2026  Project Grant, Pittsburgh Foundation ($5,000)");
     const JSZip = (await import("jszip")).default;
-    const xml = await (await JSZip.loadAsync(bytes)).file("word/document.xml")!.async("string");
-    expect(xml).toContain("Hambidge Residency");
+    const xml = await (await JSZip.loadAsync(await buildCvDocx(cv))).file("word/document.xml")!.async("string");
+    expect(xml).toContain("Project Grant");
     expect(xml).not.toContain("Selected works");
+    expect(xml).not.toContain("grant:");
+  });
+
+  it("re-links an award whose application folder was renamed", async () => {
+    const { blankCv, syncAwards } = await import("../src/lib/cv");
+    const g = (folder: string) => ({ folder, fm: normalizeGrantForTest({ title: "Project Grant", funder: "pf", status: "awarded", deadline: "2026-03-01", client: "me" }), body: "", lastEdited: 0 }) as never;
+    const name = () => "Pittsburgh Foundation";
+    const cv = syncAwards(blankCv("me", "J"), [g("2026-03-pf-project-grant")], name);
+    const after = syncAwards(cv, [g("2026-04-pf-project-grant")], name);
+    const all = after.sections.flatMap((s) => s.entries);
+    expect(all).toHaveLength(1);
+    expect(all[0].source).toBe("grant:2026-04-pf-project-grant");
+  });
+
+  it("suggests work samples that aren't on the CV", async () => {
+    const { blankCv, cvSuggestions } = await import("../src/lib/cv");
+    const { normalizeSample } = await import("../src/lib/samples");
+    const samples = [normalizeSample({ title: "River Suite", year: "2025", medium: "Oil on canvas" }, "me/river.md", ""), normalizeSample({ title: "Other", year: "2024" }, "lake/o.md", "")];
+    expect(cvSuggestions(blankCv("me", "J"), samples)).toEqual([{ section: "Selected works", entry: { year: "2025", text: "*River Suite*, Oil on canvas" } }]);
   });
 });
 

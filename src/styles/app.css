@@ -444,6 +444,7 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 20px 0; }
 .cv-h { font-weight: 700; font-size: 15px; margin: 16px 0 6px; }
 .cv-entry { display: grid; grid-template-columns: 84px 1fr; gap: 8px; margin-bottom: 3px; }
 .cv-year { color: #6b6460; font-variant-numeric: tabular-nums; }
+.cv-auto { font-size: 11px; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
 
 /* Reports */
 .report-h { display: flex; align-items: center; gap: 8px; }

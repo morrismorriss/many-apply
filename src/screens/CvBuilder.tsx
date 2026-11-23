@@ -4,7 +4,12 @@ import { ClientSelect, MenuButton, Modal } from "../components/ui";
 import { askText, confirmAction } from "../components/dialogs";
 import {
   CV_SECTIONS,
+  addAwardBack,
   applySuggestions,
+  awardEntry,
+  leftOffAwards,
+  removeEntry,
+  syncAwards,
   buildCvDocx,
   cvMarkdown,
   cvPath,
@@ -29,7 +34,9 @@ export function CvBuilder() {
   const mutate = useStore((s) => s.mutate);
   const open = useStore((s) => s.openDrawer);
   const library = useStore((s) => s.data!.library);
-  const { clientName } = useLookups();
+  const { clientName, funderName } = useLookups();
+  const grants = useStore((s) => s.data!.grants);
+  const funders = useStore((s) => s.data!.funders);
   const [client, setClient] = useState(clientFilter || ME);
   const [cv, setCvState] = useState<Cv | null>(null);
   const [filling, setFilling] = useState(false);
@@ -68,6 +75,15 @@ export function CvBuilder() {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => void flush(), 600);
   };
+
+  // Awarded applications go on the CV by themselves: when it opens, and whenever an award changes.
+  const loadedFor = cv?.client ?? null;
+  useEffect(() => {
+    if (!cv) return;
+    const next = syncAwards(cv, grants, funderName);
+    if (next !== cv) setCv(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadedFor, grants, funders]);
 
   if (!cv) return <div className="page"><p className="muted">Loading…</p></div>;
 
@@ -110,7 +126,7 @@ export function CvBuilder() {
         </div>
         <span className="spacer" />
         <ClientSelect className="select" style={{ width: "auto", maxWidth: 200 }} value={client} onChange={(c) => { void flush(); setClient(c); }} />
-        <button className="btn" onClick={() => setFilling(true)}>Fill in from Many Apply…</button>
+        <button className="btn" onClick={() => setFilling(true)} title="Awarded applications are added by themselves">Add work samples…</button>
         <MenuButton
           label="Export"
           className="btn primary"
@@ -163,8 +179,10 @@ export function CvBuilder() {
                   className="icon-btn"
                   title="Remove section"
                   onClick={async () => {
-                    if (s.entries.some((e) => e.text.trim()) && !(await confirmAction(`Remove ${s.title}?`, "Its entries are removed from this CV.", { okLabel: "Remove", danger: true }))) return;
-                    setCv({ ...cv, sections: cv.sections.filter((_, j) => j !== i) });
+                    if (s.entries.some((e) => e.text.trim()) && !(await confirmAction(`Remove ${s.title}?`, "Its entries are removed from this CV. Awards in it go to \"Left off this CV\", where you can add them back.", { okLabel: "Remove", danger: true }))) return;
+                    // Remember its awards as left off, so they don't come straight back in a new section.
+                    const folders = s.entries.flatMap((e) => (e.source?.startsWith("grant:") ? [e.source.slice(6)] : []));
+                    setCv({ ...cv, leftOff: [...new Set([...cv.leftOff, ...folders])], sections: cv.sections.filter((_, j) => j !== i) });
                   }}
                 >
                   ×
@@ -203,7 +221,12 @@ export function CvBuilder() {
                     >
                       ↑
                     </button>
-                    <button className="icon-btn" title="Remove" onClick={() => setSection(i, { entries: s.entries.filter((_, n) => n !== k) })}>×</button>
+                    {e.source && (
+                      <span className="cv-auto" title="Added from an awarded application. Remove it and it stays off this CV until you add it back.">
+                        Awarded
+                      </span>
+                    )}
+                    <button className="icon-btn" title="Remove" onClick={() => setCv(removeEntry(cv, i, k))}>×</button>
                   </div>
                 ))}
                 <div>
@@ -215,6 +238,8 @@ export function CvBuilder() {
               </div>
             </div>
           ))}
+
+          <LeftOff cv={cv} onAddBack={(folder) => setCv(addAwardBack(cv, folder, grants, funderName))} />
 
           <div>
             <MenuButton
@@ -249,7 +274,7 @@ function CvPreview({ cv }: { cv: Cv }) {
     <aside className="cv-paper" aria-label="Preview">
       <div className="cv-name">{cv.name || "Your name"}</div>
       {contact && <div className="cv-contact-line">{contact}</div>}
-      {sections.length === 0 && <p className="muted small">Add entries, or use "Fill in from Many Apply", and the CV appears here.</p>}
+      {sections.length === 0 && <p className="muted small">Add entries, or mark applications as Awarded, and the CV appears here.</p>}
       {sections.map((s, i) => (
         <div key={i}>
           <div className="cv-h">{s.title}</div>
@@ -278,11 +303,9 @@ function Inline({ text }: { text: string }) {
 }
 
 function FillDialog({ cv, onApply, onClose }: { cv: Cv; onApply: (cv: Cv) => void; onClose: () => void }) {
-  const grants = useStore((s) => s.data!.grants);
   const samples = useStore((s) => s.data!.samples);
-  const { funderName, clientName } = useLookups();
-  const [amounts, setAmounts] = useState(false);
-  const suggestions = useMemo(() => cvSuggestions(cv, grants, samples, funderName, { amounts }), [cv, grants, samples, funderName, amounts]);
+  const { clientName } = useLookups();
+  const suggestions = useMemo(() => cvSuggestions(cv, samples), [cv, samples]);
   const [off, setOff] = useState<Set<number>>(new Set());
   const picks: CvSuggestion[] = suggestions.filter((_, i) => !off.has(i));
   const bySection = new Map<string, { s: CvSuggestion; i: number }[]>();
@@ -290,7 +313,7 @@ function FillDialog({ cv, onApply, onClose }: { cv: Cv; onApply: (cv: Cv) => voi
 
   return (
     <Modal
-      title="Fill in from Many Apply"
+      title="Add work samples"
       width={640}
       onClose={onClose}
       actions={
@@ -310,14 +333,11 @@ function FillDialog({ cv, onApply, onClose }: { cv: Cv; onApply: (cv: Cv) => voi
       }
     >
       <p className="soft small" style={{ marginTop: 0 }}>
-        Awarded grants, residencies and fellowships, and {clientName(cv.client)}'s work samples that aren't on the CV yet. Untick any you'd rather leave off.
+        {clientName(cv.client)}'s work samples that aren't on the CV yet, for Selected works. Untick any you'd rather leave off. (Awarded
+        applications are added to the CV by themselves.)
       </p>
-      <label className="check small" style={{ marginBottom: 10 }}>
-        <input type="checkbox" checked={amounts} onChange={(e) => setAmounts(e.target.checked)} />
-        Include award amounts
-      </label>
       {suggestions.length === 0 ? (
-        <p className="muted">Nothing new to add. Mark applications as Awarded, or add work samples with a year, and they'll show up here.</p>
+        <p className="muted">Every work sample is already on the CV. Add more in Library → Work samples.</p>
       ) : (
         <div className="stack" style={{ gap: 10, maxHeight: 360, overflow: "auto" }}>
           {[...bySection].map(([section, list]) => (
@@ -345,5 +365,31 @@ function FillDialog({ cv, onApply, onClose }: { cv: Cv; onApply: (cv: Cv) => voi
         </div>
       )}
     </Modal>
+  );
+}
+
+function LeftOff({ cv, onAddBack }: { cv: Cv; onAddBack: (folder: string) => void }) {
+  const grants = useStore((s) => s.data!.grants);
+  const { funderName } = useLookups();
+  const off = leftOffAwards(cv, grants);
+  if (!off.length) return null;
+  return (
+    <div className="panel">
+      <h2>Left off this CV</h2>
+      <p className="muted small" style={{ marginTop: 0 }}>Awarded applications you removed. They stay off until you add them back.</p>
+      <div className="stack" style={{ gap: 6 }}>
+        {off.map((g) => {
+          const a = awardEntry(g, funderName);
+          return (
+            <div key={g.folder} className="row">
+              <span className="muted num" style={{ width: 48 }}>{a.entry.year}</span>
+              <span className="grow">{a.entry.text}</span>
+              <span className="muted small">{a.section}</span>
+              <button className="btn small" onClick={() => onAddBack(g.folder)}>Add back</button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
