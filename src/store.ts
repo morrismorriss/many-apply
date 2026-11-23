@@ -107,7 +107,7 @@ interface State {
   saveClient(c: Client): Promise<void>;
   addClient(name: string): Promise<string>;
   saveDonor(d: Donor): Promise<void>;
-  addDonor(name: string): Promise<string>;
+  addDonor(name: string, client?: string): Promise<string>;
   deleteDonor(slug: string): Promise<void>;
   saveLibrary(item: LibraryItem): Promise<void>;
   saveSample(s: WorkSample): Promise<void>;
@@ -418,9 +418,9 @@ export const useStore = create<State>((set, get) => {
       const data = get().data!;
       set({ data: { ...data, donors: data.donors.map((x) => (x.slug === d.slug ? d : x)) } });
     },
-    async addDonor(name) {
+    async addDonor(name, client) {
       markWrite();
-      const slug = await createDonor(get().fs!, name);
+      const slug = await createDonor(get().fs!, name, client);
       await get().reload();
       return slug;
     },

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useStore } from "../store";
-import { InlineDate, InlineText, TagInput } from "./ui";
+import { ClientSelect, InlineDate, InlineText, TagInput } from "./ui";
 import { confirmAction } from "./dialogs";
 import { DONOR_STAGES, DONOR_STAGE_LABEL, TOUCH_KINDS, looksLapsed, summarize, type Donor, type Gift, type Touch } from "../lib/donors";
 import { fmtDate, fmtMoney, parseNumber, todayISO } from "../lib/util";
@@ -48,6 +48,8 @@ export function DonorDrawer({ slug }: { slug: string }) {
       <section>
         <h3>Contact</h3>
         <div className="props">
+          <div className="k">Gave to</div>
+          <div className="v"><ClientSelect className="select inline" value={d.fm.client} onChange={(client) => set({ client })} /></div>
           <div className="k">Email</div>
           <div className="v"><InlineText type="email" value={d.fm.email} placeholder="Empty" onSave={(email) => set({ email })} /></div>
           <div className="k">Phone</div>

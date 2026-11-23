@@ -166,7 +166,7 @@ export function sampleVault(today = new Date()): { files: Record<string, string>
     ],
   });
   donor("priya-raman", {
-    name: "Priya Raman", organization: "Raman Family Fund", stage: "prospect", tags: ["family-foundation"],
+    name: "Priya Raman", organization: "Raman Family Fund", client: "lakeside-youth-theater", stage: "prospect", tags: ["family-foundation"],
     next_followup: d(7), next_step: "Coffee to talk about the summer workshop",
     touches: [{ date: d(-10), kind: "event", note: "Met at the City Theatre opening" }],
   });

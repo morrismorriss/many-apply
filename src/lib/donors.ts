@@ -3,6 +3,7 @@
 import { parseFrontmatter, stringifyFrontmatter } from "./frontmatter";
 import { basename, type VaultFS } from "./fs/types";
 import { asArray, parseNumber, slugify, str, todayISO } from "./util";
+import { ME } from "./model";
 
 export const DONOR_STAGES = ["prospect", "first-time", "active", "major", "lapsed"] as const;
 export type DonorStage = (typeof DONOR_STAGES)[number];
@@ -38,6 +39,8 @@ export interface Donor {
     phone: string;
     address: string;
     organization: string;
+    /** Who they gave to: "me" or a client's slug. */
+    client: string;
     stage: DonorStage;
     tags: string[];
     next_followup: string;
@@ -51,7 +54,7 @@ export interface Donor {
 }
 
 const DONOR_ORDER = [
-  "name", "email", "phone", "address", "organization", "stage", "tags", "next_followup", "next_step", "gifts", "touches", "created",
+  "name", "email", "phone", "address", "organization", "client", "stage", "tags", "next_followup", "next_step", "gifts", "touches", "created",
 ];
 
 function dateStr(v: unknown): string {
@@ -59,7 +62,7 @@ function dateStr(v: unknown): string {
   return str(v).trim();
 }
 
-export function blankDonor(slug: string, name: string): Donor {
+export function blankDonor(slug: string, name: string, client: string = ME): Donor {
   return {
     slug,
     fm: {
@@ -68,6 +71,7 @@ export function blankDonor(slug: string, name: string): Donor {
       phone: "",
       address: "",
       organization: "",
+      client: client || ME,
       stage: "prospect",
       tags: [],
       next_followup: "",
@@ -94,6 +98,7 @@ export function normalizeDonor(slug: string, data: Record<string, unknown>, body
       phone: str(data.phone),
       address: str(data.address),
       organization: str(data.organization),
+      client: str(data.client).trim() || ME,
       stage,
       tags: asArray(data.tags),
       next_followup: dateStr(data.next_followup),
@@ -126,11 +131,11 @@ export async function writeDonor(fs: VaultFS, d: Donor) {
   await fs.writeText(`donors/${d.slug}.md`, stringifyFrontmatter(d.fm, d.body, DONOR_ORDER));
 }
 
-export async function createDonor(fs: VaultFS, name: string): Promise<string> {
+export async function createDonor(fs: VaultFS, name: string, client: string = ME): Promise<string> {
   const base = slugify(name) || "donor";
   let slug = base;
   for (let i = 2; await fs.exists(`donors/${slug}.md`); i++) slug = `${base}-${i}`;
-  await writeDonor(fs, blankDonor(slug, name.trim()));
+  await writeDonor(fs, blankDonor(slug, name.trim(), client));
   return slug;
 }
 
@@ -156,6 +161,11 @@ export function summarize(d: Donor, year = new Date().getFullYear()): DonorSumma
     unthanked: gifts.filter((g) => !g.acknowledged).length,
     lastTouch: [d.fm.touches[0]?.date ?? "", gifts[0]?.date ?? ""].sort().pop() ?? "",
   };
+}
+
+/** Donors who gave to this client ("" for everyone). */
+export function donorsFor(donors: Donor[], client: string): Donor[] {
+  return client ? donors.filter((d) => d.fm.client === client) : donors;
 }
 
 /** A donor who gave before but not in the last 18 months. Suggested, never set automatically. */
