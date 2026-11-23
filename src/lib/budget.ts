@@ -55,7 +55,8 @@ export function parseBudgetCsv(text: string): BudgetLine[] {
   const out: BudgetLine[] = [];
   for (const row of parsed.data) {
     const r: Record<string, string> = {};
-    for (const [f, col] of map) r[col] = (row[f] ?? "").trim();
+    // A leading apostrophe before = + - @ was added on export so spreadsheets show it as text; take it off.
+    for (const [f, col] of map) r[col] = (row[f] ?? "").trim().replace(/^'(?=[=+\-@])/, "");
     if (/^((grand\s+)?totals?\b|gap\b)/i.test(r.line_item || "") || /^totals?\b/i.test(r.category || "")) continue;
     if (!r.line_item && !r.amount && !r.rate) continue;
     out.push(
@@ -73,18 +74,21 @@ export function parseBudgetCsv(text: string): BudgetLine[] {
   return out;
 }
 
+/** Text that a spreadsheet would run as a formula gets a leading apostrophe (see csvSafe in csvImport). */
+const safe = (s: string) => (/^[=+\-@\t\r]/.test(s) && !/^[-+]?\d+(\.\d+)?$/.test(s.trim()) ? `'${s}` : s);
+
 export function stringifyBudgetCsv(lines: BudgetLine[], opts: { totals?: boolean; amounts?: boolean } = {}): string {
   const amounts = opts.amounts ?? true;
   const rows: (string | number)[][] = lines
     .filter((l) => l.line_item.trim() || lineAmount(l))
     .map((l) => [
-      l.category,
+      safe(l.category),
       l.type,
-      l.line_item,
+      safe(l.line_item),
       amounts ? (l.quantity ?? "") : "",
       amounts ? (l.rate ?? "") : "",
       amounts ? (l.quantity !== null && l.rate !== null ? lineAmount(l) : (l.amount ?? "")) : "",
-      l.notes,
+      safe(l.notes),
     ]);
   if (opts.totals) {
     const t = budgetTotals(lines);
@@ -164,4 +168,17 @@ export function budgetAsTable(lines: BudgetLine[]): { text: string; html: string
     totals.map((r) => `<tr>${r.map((c) => `<td><b>${esc(c)}</b></td>`).join("")}</tr>`).join("") +
     `</table>`;
   return { text, html };
+}
+
+
+/** A file name for a Library budget that keeps the name's capitals: "Made Men reading" → "Made-Men-reading.csv". */
+export function libraryBudgetFile(name: string): string {
+  const stem = name.trim().replace(/[\\/:*?"<>|#%{}^~[\]`]+/g, "").replace(/\s+/g, "-").replace(/^[.-]+|[.-]+$/g, "").slice(0, 80);
+  return `${stem || "budget"}.csv`;
+}
+
+/** "staged-reading.csv" → "Staged reading"; "Made-Men-reading.csv" → "Made Men reading" */
+export function libraryBudgetName(file: string): string {
+  const s = file.replace(/\.csv$/i, "").replace(/[-_]+/g, " ").trim();
+  return s ? s[0].toUpperCase() + s.slice(1) : "Budget";
 }

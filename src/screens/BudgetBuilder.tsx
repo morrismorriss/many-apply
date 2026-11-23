@@ -1,15 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLookups, useStore } from "../store";
-import { blankLine, budgetAsTable, budgetTotals, lineAmount, parseBudgetCsv, stringifyBudgetCsv } from "../lib/budget";
+import { blankLine, budgetAsTable, libraryBudgetFile, libraryBudgetName, budgetTotals, lineAmount, parseBudgetCsv, stringifyBudgetCsv } from "../lib/budget";
 import type { BudgetLine } from "../lib/model";
 import { copyToClipboard, pickFile, saveFile } from "../lib/platform";
 import { debounce, fmtMoney, slugify } from "../lib/util";
 import { confirmAction } from "../components/dialogs";
 import { MenuButton, Modal } from "../components/ui";
+import type { Grant } from "../lib/model";
+import { setPref } from "../lib/platform";
 
-export function BudgetBuilder({ folder }: { folder: string }) {
+export { libraryBudgetName };
+
+/** The budget for an application (`folder`), or a Library budget not tied to any application (`file`, in library/budgets/). */
+export function BudgetBuilder({ folder = "", file = "" }: { folder?: string; file?: string }) {
   const fs = useStore((s) => s.fs!);
-  const g = useStore((s) => s.data?.grants.find((x) => x.folder === folder));
+  const g = useStore((s) => (folder ? s.data?.grants.find((x) => x.folder === folder) : undefined));
   const data = useStore((s) => s.data!);
   const update = useStore((s) => s.updateGrant);
   const go = useStore((s) => s.go);
@@ -25,7 +30,8 @@ export function BudgetBuilder({ folder }: { folder: string }) {
   const [focusId, setFocusId] = useState<string | null>(null);
   const [saveTpl, setSaveTpl] = useState(false);
   const tableRef = useRef<HTMLTableElement>(null);
-  const path = `grants/${folder}/budget.csv`;
+  const path = folder ? `grants/${folder}/budget.csv` : `library/budgets/${file}`;
+  const budgetName = libraryBudgetName(file);
   const categories = data.settings.categories;
 
   useEffect(() => {
@@ -58,7 +64,7 @@ export function BudgetBuilder({ folder }: { folder: string }) {
     setFocusId(null);
   }, [focusId, lines]);
 
-  if (!g) return <div className="page"><p className="muted">This application isn't in the vault.</p></div>;
+  if (folder && !g) return <div className="page"><p className="muted">This application isn't in the vault.</p></div>;
   if (!lines) return <div className="page"><p className="muted">Loading…</p></div>;
 
   const change = (next: BudgetLine[]) => {
@@ -77,8 +83,8 @@ export function BudgetBuilder({ folder }: { folder: string }) {
   const remove = (id: string) => change(lines.length === 1 ? [blankLine()] : lines.filter((l) => l.id !== id));
 
   const t = budgetTotals(lines);
-  const c = g.fm.currency;
-  const over = g.fm.amount_requested !== null && g.fm.max_award !== null && g.fm.amount_requested > g.fm.max_award;
+  const c = g?.fm.currency ?? data.settings.currency;
+  const over = !!g && g.fm.amount_requested !== null && g.fm.max_award !== null && g.fm.amount_requested > g.fm.max_award;
   const isEmpty = lines.every((l) => !l.line_item && !lineAmount(l));
 
   const loadLines = async (incoming: BudgetLine[], label: string) => {
@@ -87,9 +93,9 @@ export function BudgetBuilder({ folder }: { folder: string }) {
     toast(`Loaded ${label}`);
   };
 
-  const templateItems = data.budgetTemplates.map((tpl) => ({
-    label: <>Template: {tpl.replace(/\.csv$/, "").replace(/-/g, " ")}</>,
-    run: async () => loadLines(parseBudgetCsv(await fs.readText(`library/budgets/${tpl}`)), "the template"),
+  const templateItems = data.budgetTemplates.filter((tpl) => tpl !== file).map((tpl) => ({
+    label: <>Library budget: {libraryBudgetName(tpl)}</>,
+    run: async () => loadLines(parseBudgetCsv(await fs.readText(`library/budgets/${tpl}`)), `the "${libraryBudgetName(tpl)}" budget`),
   }));
   const pastItems = data.grants
     .filter((x) => x.folder !== folder)
@@ -103,18 +109,34 @@ export function BudgetBuilder({ folder }: { folder: string }) {
         }
       },
     }));
-  const defaultTpl = client(g.fm.client)?.fm.budget_template;
+  const defaultTpl = g ? client(g.fm.client)?.fm.budget_template : undefined;
+  // Applications to copy a Library budget into: open ones first.
+  const openFirst = [...data.grants].sort(
+    (a, b) => Number(["awarded", "declined", "withdrawn"].includes(a.fm.status)) - Number(["awarded", "declined", "withdrawn"].includes(b.fm.status)),
+  );
+  const copyTo = async (target: Grant) => {
+    const dest = `grants/${target.folder}/budget.csv`;
+    if ((await fs.exists(dest)) && !(await confirmAction(`Replace the budget for ${target.fm.title}?`, "Its current budget lines will be replaced with this one.", { okLabel: "Replace" }))) return;
+    await mutate((v) => v.writeText(dest, stringifyBudgetCsv(lines)));
+    toast(`Copied to ${target.fm.title}`, "ok", { label: "Open", run: () => go({ screen: "budget", folder: target.folder }) });
+  };
 
   return (
     <div className="page">
       <div className="page-head">
         <div>
-          <button className="btn ghost small" style={{ marginLeft: -8, marginBottom: 4 }} onClick={() => { go({ screen: "pipeline" }); openDrawer({ kind: "grant", id: folder }); }}>
-            ← {g.fm.title}
-          </button>
-          <h1>Budget</h1>
+          {g ? (
+            <button className="btn ghost small" style={{ marginLeft: -8, marginBottom: 4 }} onClick={() => { go({ screen: "pipeline" }); openDrawer({ kind: "grant", id: folder }); }}>
+              ← {g.fm.title}
+            </button>
+          ) : (
+            <button className="btn ghost small" style={{ marginLeft: -8, marginBottom: 4 }} onClick={() => { setPref("libraryTab", "budgets"); go({ screen: "library" }); }}>
+              ← Library budgets
+            </button>
+          )}
+          <h1>{g ? "Budget" : budgetName}</h1>
           <div className="sub">
-            Saved as <code>grants/{folder}/budget.csv</code> · {saved ? "Saved" : "Saving…"}
+            {g ? null : "Not tied to an application. "}Saved as <code>{path}</code> · {saved ? "Saved" : "Saving…"}
           </div>
         </div>
         <span className="spacer" />
@@ -128,7 +150,13 @@ export function BudgetBuilder({ folder }: { folder: string }) {
         >
           Import CSV
         </button>
-        <button className="btn" onClick={() => setSaveTpl(true)} disabled={isEmpty}>Save as template</button>
+        <button className="btn" onClick={() => setSaveTpl(true)} disabled={isEmpty}>{g ? "Save to Library" : "Save a copy"}</button>
+        {!g && (
+          <MenuButton
+            label="Copy to an application ▾"
+            items={openFirst.map((x) => ({ label: <>{x.fm.title} <span className="muted small">{x.fm.status}</span></>, run: () => void copyTo(x) }))}
+          />
+        )}
         <button
           className="btn"
           onClick={async () => {
@@ -139,16 +167,16 @@ export function BudgetBuilder({ folder }: { folder: string }) {
         >
           Copy as table
         </button>
-        <button className="btn primary" onClick={() => saveFile(`${slugify(g.fm.title)}-budget.csv`, stringifyBudgetCsv(lines, { totals: true }), "text/csv")}>
+        <button className="btn primary" onClick={() => saveFile(`${slugify(g?.fm.title ?? budgetName)}-budget.csv`, stringifyBudgetCsv(lines, { totals: true }), "text/csv")}>
           Export CSV
         </button>
       </div>
 
-      {!exists && isEmpty && defaultTpl && (
+      {g && !exists && isEmpty && defaultTpl && (
         <div className="callout" style={{ marginBottom: 14 }}>
-          {client(g.fm.client)?.fm.name} has a default template.{" "}
+          {client(g.fm.client)?.fm.name} has a default Library budget.{" "}
           <a href="#" onClick={async (e) => { e.preventDefault(); await loadLines(parseBudgetCsv(await fs.readText(`library/budgets/${defaultTpl}`)), "the default template"); }}>
-            Start from {defaultTpl.replace(/\.csv$/, "").replace(/-/g, " ")}
+            Start from {libraryBudgetName(defaultTpl)}
           </a>
         </div>
       )}
@@ -308,12 +336,16 @@ export function BudgetBuilder({ folder }: { folder: string }) {
             )}
             <span className="big">Gap</span>
             <span className="big num">{fmtMoney(t.gap, c)}</span>
-            <span className="soft">Amount requested</span>
-            <span className="num">{fmtMoney(g.fm.amount_requested, c)}</span>
-            <span className="soft">Funder's max</span>
-            <span className="num">{fmtMoney(g.fm.max_award, c)}</span>
+            {g && (
+              <>
+                <span className="soft">Amount requested</span>
+                <span className="num">{fmtMoney(g.fm.amount_requested, c)}</span>
+                <span className="soft">Funder's max</span>
+                <span className="num">{fmtMoney(g.fm.max_award, c)}</span>
+              </>
+            )}
           </div>
-          <div className="row" style={{ marginTop: 14 }}>
+          {g && <div className="row" style={{ marginTop: 14 }}>
             <button
               className="btn"
               disabled={t.gap <= 0 || g.fm.amount_requested === t.gap}
@@ -324,8 +356,8 @@ export function BudgetBuilder({ folder }: { folder: string }) {
             >
               Set amount requested to the gap
             </button>
-          </div>
-          {(over || (g.fm.max_award !== null && t.gap > g.fm.max_award)) && (
+          </div>}
+          {g && (over || (g.fm.max_award !== null && t.gap > g.fm.max_award)) && (
             <div className="callout warn small" style={{ marginTop: 10 }}>
               {over
                 ? `The request (${fmtMoney(g.fm.amount_requested, c)}) is above the funder's max (${fmtMoney(g.fm.max_award, c)}).`
@@ -337,13 +369,14 @@ export function BudgetBuilder({ folder }: { folder: string }) {
 
       {saveTpl && (
         <SaveTemplate
+          keepAmounts={!g}
           onClose={() => setSaveTpl(false)}
           onSave={async (name, amounts) => {
             setSaveTpl(false);
-            const file = `${slugify(name)}.csv`;
-            if (data.budgetTemplates.includes(file) && !(await confirmAction(`Replace the "${name}" template?`))) return;
-            await mutate((fs) => fs.writeText(`library/budgets/${file}`, stringifyBudgetCsv(lines, { amounts })));
-            toast(`Saved template "${name}"`);
+            const target = libraryBudgetFile(name);
+            if (data.budgetTemplates.includes(target) && !(await confirmAction(`Replace the "${name}" budget in the Library?`))) return;
+            await mutate((fs) => fs.writeText(`library/budgets/${target}`, stringifyBudgetCsv(lines, { amounts })));
+            toast(`Saved "${name}" to Library budgets`, "ok", { label: "Open", run: () => go({ screen: "libraryBudget", file: target }) });
           }}
         />
       )}
@@ -382,12 +415,12 @@ function NumIn({ value, onChange, width, placeholder, onKeyDown }: {
   );
 }
 
-function SaveTemplate({ onClose, onSave }: { onClose: () => void; onSave: (name: string, amounts: boolean) => void }) {
+function SaveTemplate({ keepAmounts, onClose, onSave }: { keepAmounts: boolean; onClose: () => void; onSave: (name: string, amounts: boolean) => void }) {
   const [name, setName] = useState("");
-  const [amounts, setAmounts] = useState(false);
+  const [amounts, setAmounts] = useState(keepAmounts);
   return (
     <Modal
-      title="Save as template"
+      title="Save to Library budgets"
       onClose={onClose}
       actions={
         <>
@@ -398,13 +431,13 @@ function SaveTemplate({ onClose, onSave }: { onClose: () => void; onSave: (name:
     >
       <div className="stack">
         <label className="field">
-          Template name
+          Name
           <input className="input" autoFocus value={name} placeholder="Staged reading" onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && name.trim() && onSave(name.trim(), amounts)} />
         </label>
         <label className="check">
           <input type="checkbox" checked={amounts} onChange={(e) => setAmounts(e.target.checked)} /> Keep the amounts
         </label>
-        <span className="muted small">Saved in library/budgets/. Use "Start from…" on any budget to load it.</span>
+        <span className="muted small">Saved in Library → Budgets (library/budgets/). Any budget can start from it with "Start from…".</span>
       </div>
     </Modal>
   );

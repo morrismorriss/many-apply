@@ -97,7 +97,7 @@ export function GrantCard({ g, draggable, onDragStart, onDragEnd, dragging, foot
         {(g.fm.amount_requested ?? g.fm.max_award) !== null && (
           <span className="num">{fmtMoney(g.fm.amount_awarded ?? g.fm.amount_requested ?? g.fm.max_award, g.fm.currency, true)}</span>
         )}
-        <ClientLabel slug={g.fm.client} hideMe />
+        <ClientLabel slug={g.fm.client} />
       </div>
       {footer && (
         <div className="row" style={{ marginTop: 10, justifyContent: "flex-end" }} onClick={(e) => e.stopPropagation()}>

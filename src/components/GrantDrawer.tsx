@@ -213,10 +213,8 @@ export function GrantDrawer({ folder }: { folder: string }) {
         </span>
         <button
           className="btn small danger"
-          onClick={async () => {
-            if (await confirmAction("Move this application to trash?", "It goes to .manyapply/trash/ in your vault, so nothing is lost.", { okLabel: "Move to trash", danger: true }))
-              await del(folder);
-          }}
+          title="Moves it to .manyapply/trash/ in your vault. You can undo."
+          onClick={() => void del(folder)}
         >
           Delete
         </button>
@@ -565,7 +563,19 @@ function Reports({ g }: { g: Grant }) {
         </button>
       </h3>
       {g.fm.reports.length === 0 && (
-        <div className="callout small">Got your reporting dates? Add them here, whenever they arrive. Usually they're in the award email.</div>
+        <>
+          <label className="check small" style={{ marginBottom: 8 }}>
+            <input
+              type="checkbox"
+              checked={g.fm.no_reporting}
+              onChange={(e) => update(g.folder, (x) => ({ ...x, fm: { ...x.fm, no_reporting: e.target.checked } }))}
+            />
+            No reporting needed
+          </label>
+          {!g.fm.no_reporting && (
+            <div className="callout small">Got your reporting dates? Add them here, whenever they arrive. Usually they're in the award email.</div>
+          )}
+        </>
       )}
       <div className="stack" style={{ gap: 6 }}>
         {g.fm.reports.map((r, i) => (

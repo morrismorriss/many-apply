@@ -72,7 +72,7 @@ export function FunderDrawer({ slug }: { slug: string }) {
               {st.grants.map((g) => (
                 <tr key={g.folder} className="click" onClick={() => open({ kind: "grant", id: g.folder })}>
                   <td>
-                    {g.fm.title} <ClientLabel slug={g.fm.client} hideMe />
+                    {g.fm.title} <ClientLabel slug={g.fm.client} />
                   </td>
                   <td className="muted small">{fmtDate(g.fm.deadline, { year: true })}</td>
                   <td className="r num">{fmtMoney(g.fm.amount_awarded ?? g.fm.amount_requested, g.fm.currency)}</td>

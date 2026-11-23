@@ -8,7 +8,7 @@ import { ME } from "../lib/model";
 import { itemOwner, itemsForClient, searchLibrary } from "../lib/library";
 import { recordSampleUsedIn, removeSampleUsedIn, sampleCaption, samplesForClient, searchSamples, previewMime, SAMPLE_EXTENSIONS, SAMPLE_KIND_LABEL } from "../lib/samples";
 import { DOC_EXTENSIONS, documentFilePath, documentOwner } from "../lib/documents";
-import { listAttachments, recordUsedIn, removeUsedIn, trash } from "../lib/vault";
+import { listAttachments, recordUsedIn, removeUsedIn } from "../lib/vault";
 import { copyToClipboard, droppedFiles, errorText, openVaultFile, pickFiles, type PickedFile } from "../lib/platform";
 import { displayText, wordCount } from "../lib/util";
 import { MenuButton, Modal } from "./ui";
@@ -26,6 +26,7 @@ export function Materials({ g }: { g: Grant }) {
   const mutate = useStore((s) => s.mutate);
   const open = useStore((s) => s.openDrawer);
   const toast = useStore((s) => s.toast);
+  const trashPaths = useStore((s) => s.trashPaths);
   const [picker, setPicker] = useState<Kind | null>(null);
   const [files, setFiles] = useState<string[]>([]);
   const [filesVersion, setFilesVersion] = useState(0);
@@ -215,10 +216,9 @@ export function Materials({ g }: { g: Grant }) {
             return (
               <Row
                 key={name}
-                onRemove={async () => {
-                  await mutate((v) => trash(v, path));
-                  setFilesVersion((n) => n + 1);
-                  toast("Moved to trash");
+                onRemove={() => {
+                  setFiles((xs) => xs.filter((x) => x !== name));
+                  void trashPaths([path], (d) => d).then(() => setFilesVersion((n) => n + 1));
                 }}
               >
                 <span className="grow ellipsis small">{name}</span>

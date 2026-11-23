@@ -117,6 +117,8 @@ export async function saveFile(defaultName: string, data: string | Uint8Array, m
 
 export async function openExternal(url: string) {
   if (!url) return;
+  // Web and mailto links only, as the desktop app enforces too: never javascript: or file: links from a feed or import.
+  if (!/^(https?:|mailto:)/i.test(url.trim())) throw new Error("Only web and mailto links can be opened");
   if (isTauri) {
     const { invoke } = await import("@tauri-apps/api/core");
     await invoke("open_url", { url });

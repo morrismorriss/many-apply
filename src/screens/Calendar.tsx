@@ -146,7 +146,7 @@ function Agenda({ events }: { events: CalEvent[] }) {
                 <span className={e.done && e.kind !== "submitted" ? "muted" : ""} style={{ textDecoration: e.done && e.kind !== "submitted" ? "line-through" : undefined }}>
                   {e.grant.fm.title}
                 </span>
-                <ClientLabel slug={e.grant.fm.client} hideMe />
+                <ClientLabel slug={e.grant.fm.client} />
               </div>
             ))}
           </div>

@@ -20,11 +20,13 @@ import type { Grant } from "./model";
 import { ME } from "./model";
 import type { WorkSample } from "./samples";
 import { para, packDocx, inlineRuns, run } from "./reviewExport";
-import { fmtMoney, str } from "./util";
+import { asArray, str } from "./util";
 
 export interface CvEntry {
   year: string;
   text: string;
+  /** "grant:<folder>" for an entry Many Apply added from an awarded application. */
+  source?: string;
 }
 
 export interface CvSection {
@@ -40,6 +42,8 @@ export interface Cv {
   website: string;
   phone: string;
   sections: CvSection[];
+  /** Awarded applications (by folder) the user took off this CV, so they aren't added again. */
+  leftOff: string[];
   /** Other frontmatter keys, kept round-trip. */
   extra: Record<string, unknown>;
 }
@@ -71,13 +75,22 @@ export function blankCv(client: string, name: string): Cv {
     website: "",
     phone: "",
     sections: STARTING_SECTIONS.map((title) => ({ title, entries: [] })),
+    leftOff: [],
     extra: {},
   };
 }
 
 const YEARISH = /^(\d{4}|\d{4}\s*[-–—]\s*(\d{2,4}|present|now|ongoing)?|present|forthcoming|ongoing|upcoming)$/i;
 
+const SOURCE = /\s*<!--\s*(grant:[^>]*?)\s*-->\s*$/;
+
 export function parseEntry(line: string): CvEntry {
+  const src = SOURCE.exec(line);
+  const e = parseEntryText(src ? line.slice(0, src.index) : line);
+  return src ? { ...e, source: src[1] } : e;
+}
+
+function parseEntryText(line: string): CvEntry {
   const t = line.replace(/^\s*[-*•]\s+/, "").trim();
   const bar = t.indexOf(" | ");
   if (bar > 0 && bar <= 24) return { year: t.slice(0, bar).trim(), text: t.slice(bar + 3).trim() };
@@ -91,7 +104,8 @@ export function parseCv(text: string, client: string, fallbackName: string): Cv 
   const cv = blankCv(client, str(data.name) || fallbackName);
   cv.sections = [];
   for (const k of ["location", "email", "website", "phone"] as const) cv[k] = str(data[k]);
-  cv.extra = Object.fromEntries(Object.entries(data).filter(([k]) => !["name", "location", "email", "website", "phone"].includes(k)));
+  cv.leftOff = asArray(data.left_off);
+  cv.extra = Object.fromEntries(Object.entries(data).filter(([k]) => !["name", "location", "email", "website", "phone", "left_off"].includes(k)));
   let cur: CvSection | null = null;
   for (const line of body.replace(/\r\n?/g, "\n").split("\n")) {
     const h = /^#{1,3}\s+(.+?)\s*$/.exec(line);
@@ -110,11 +124,12 @@ export function parseCv(text: string, client: string, fallbackName: string): Cv 
 
 export function stringifyCv(cv: Cv): string {
   const fm: Record<string, unknown> = { name: cv.name, location: cv.location, email: cv.email, website: cv.website, phone: cv.phone, ...cv.extra };
+  if (cv.leftOff.length) fm.left_off = cv.leftOff;
   for (const k of ["location", "email", "website", "phone"]) if (!fm[k]) delete fm[k];
   const body = cv.sections
-    .map((s) => [`## ${s.title}`, ...s.entries.filter((e) => e.text.trim() || e.year.trim()).map((e) => `- ${e.year.trim() ? `${e.year.trim()} | ` : ""}${e.text.trim()}`)].join("\n"))
+    .map((s) => [`## ${s.title}`, ...s.entries.filter((e) => e.text.trim() || e.year.trim()).map((e) => `- ${e.year.trim() ? `${e.year.trim()} | ` : ""}${e.text.trim()}${e.source ? ` <!-- ${e.source} -->` : ""}`)].join("\n"))
     .join("\n\n");
-  return stringifyFrontmatter(fm, body ? `\n${body}\n` : "", ["name", "location", "email", "website", "phone"]);
+  return stringifyFrontmatter(fm, body ? `\n${body}\n` : "", ["name", "location", "email", "website", "phone", "left_off"]);
 }
 
 export async function readCv(fs: VaultFS, client: string, fallbackName: string): Promise<Cv> {
@@ -151,25 +166,110 @@ export interface CvSuggestion {
   entry: CvEntry;
 }
 
+/** The CV line for an awarded application, and the section it belongs in. */
+export function awardEntry(g: Grant, funderName: (slug: string) => string): CvSuggestion {
+  const funder = funderName(g.fm.funder);
+  const titleHasFunder = funder && norm(g.fm.title).includes(norm(funder));
+  const text = titleHasFunder || !funder ? g.fm.title : `${g.fm.title}, ${funder}`;
+  const section = g.fm.type === "residency" || g.fm.type === "fellowship" ? "Residencies and fellowships" : "Grants and awards";
+  return { section, entry: { year: yearOf(g), text, source: `grant:${g.folder}` } };
+}
+
+const awardedFor = (cv: Cv, grants: Grant[]) => grants.filter((g) => (g.fm.client || ME) === (cv.client || ME) && g.fm.status === "awarded");
+
 /**
- * Entries Many Apply already knows about: awarded grants, residencies and fellowships, and work samples.
- * Only ones not already on the CV (by their wording) are returned.
+ * Keep the CV in step with awarded applications: add any that aren't on it (unless they were taken off),
+ * and drop ones that are no longer awarded, unless their wording was changed by hand. Entries typed by hand
+ * that match an award are linked to it rather than duplicated. Returns the same object when nothing changed.
  */
-export function cvSuggestions(cv: Cv, grants: Grant[], samples: WorkSample[], funderName: (slug: string) => string, opts: { amounts?: boolean } = {}): CvSuggestion[] {
+export function syncAwards(cv: Cv, grants: Grant[], funderName: (slug: string) => string): Cv {
+  const awarded = awardedFor(cv, grants);
+  const byFolder = new Map(grants.map((g) => [g.folder, g]));
+  let changed = false;
+  const sections = cv.sections.map((s) => ({ ...s, entries: [...s.entries] }));
+  const linked = new Set<string>();
+
+  for (const sec of sections) {
+    sec.entries = sec.entries.flatMap((e) => {
+      if (!e.source) return [e];
+      const folder = e.source.slice("grant:".length);
+      const g = byFolder.get(folder);
+      if (g && g.fm.status === "awarded") {
+        linked.add(folder);
+        return [e];
+      }
+      changed = true;
+      if (g) {
+        // No longer awarded: drop it if it still reads as Many Apply wrote it, else keep it as the user's own.
+        return norm(awardEntry(g, funderName).entry.text) === norm(e.text) ? [] : [{ year: e.year, text: e.text }];
+      }
+      // The application was renamed (its folder follows the deadline and funder) or deleted.
+      const renamed = awarded.find((x) => !linked.has(x.folder) && norm(awardEntry(x, funderName).entry.text) === norm(e.text));
+      if (renamed) {
+        linked.add(renamed.folder);
+        return [{ ...e, source: `grant:${renamed.folder}` }];
+      }
+      return [{ year: e.year, text: e.text }];
+    });
+  }
+
+  const leftOff = cv.leftOff.filter((f) => awarded.some((g) => g.folder === f));
+  if (leftOff.length !== cv.leftOff.length) changed = true;
+  const touched = new Set<string>();
+  for (const g of awarded) {
+    if (linked.has(g.folder) || leftOff.includes(g.folder)) continue;
+    const want = awardEntry(g, funderName);
+    // A matching line typed by hand (or added before awards were automatic): link it instead of adding another.
+    const match = sections.flatMap((s) => s.entries).find((e) => !e.source && (norm(e.text) === norm(want.entry.text) || norm(e.text).startsWith(norm(g.fm.title))));
+    if (match) {
+      match.source = want.entry.source;
+    } else {
+      let sec = sections.find((s) => norm(s.title) === norm(want.section));
+      if (!sec) {
+        sec = { title: want.section, entries: [] };
+        sections.push(sec);
+      }
+      sec.entries.push(want.entry);
+      touched.add(norm(want.section));
+    }
+    changed = true;
+  }
+  if (!changed) return cv;
+  return {
+    ...cv,
+    leftOff,
+    sections: sections.map((s) => (touched.has(norm(s.title)) ? { ...s, entries: sortEntries(s.entries) } : s)),
+  };
+}
+
+/** Take an entry off the CV. An award is remembered as left off, so it isn't added back automatically. */
+export function removeEntry(cv: Cv, sectionIndex: number, entryIndex: number): Cv {
+  const e = cv.sections[sectionIndex]?.entries[entryIndex];
+  if (!e) return cv;
+  const folder = e.source?.startsWith("grant:") ? e.source.slice("grant:".length) : "";
+  return {
+    ...cv,
+    leftOff: folder && !cv.leftOff.includes(folder) ? [...cv.leftOff, folder] : cv.leftOff,
+    sections: cv.sections.map((s, i) => (i === sectionIndex ? { ...s, entries: s.entries.filter((_, j) => j !== entryIndex) } : s)),
+  };
+}
+
+/** Put a left-off award back on the CV. */
+export function addAwardBack(cv: Cv, folder: string, grants: Grant[], funderName: (slug: string) => string): Cv {
+  return syncAwards({ ...cv, leftOff: cv.leftOff.filter((f) => f !== folder) }, grants, funderName);
+}
+
+/** Awarded applications taken off this CV, for the "Add back" list. */
+export function leftOffAwards(cv: Cv, grants: Grant[]): Grant[] {
+  return awardedFor(cv, grants).filter((g) => cv.leftOff.includes(g.folder));
+}
+
+/** Work samples not on the CV yet (awards are added automatically by syncAwards). */
+export function cvSuggestions(cv: Cv, samples: WorkSample[]): CvSuggestion[] {
   const onCv = new Set(cv.sections.flatMap((s) => s.entries.map((e) => norm(e.text))));
   const has = (text: string) => [...onCv].some((t) => t === norm(text) || t.startsWith(norm(text)));
   const out: CvSuggestion[] = [];
   const client = cv.client || ME;
-  for (const g of grants) {
-    if ((g.fm.client || ME) !== client || g.fm.status !== "awarded") continue;
-    const funder = funderName(g.fm.funder);
-    const titleHasFunder = funder && norm(g.fm.title).includes(norm(funder));
-    let text = titleHasFunder || !funder ? g.fm.title : `${g.fm.title}, ${funder}`;
-    if (opts.amounts && g.fm.amount_awarded) text += ` (${fmtMoney(g.fm.amount_awarded, g.fm.currency)})`;
-    if (has(text) || has(g.fm.title)) continue;
-    const section = g.fm.type === "residency" || g.fm.type === "fellowship" ? "Residencies and fellowships" : "Grants and awards";
-    out.push({ section, entry: { year: yearOf(g), text } });
-  }
   for (const s of samples) {
     if (s.path.split("/")[0] !== client) continue;
     const detail = [s.fm.medium].filter((x) => x.trim()).join(", ");

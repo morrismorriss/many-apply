@@ -99,6 +99,17 @@ export interface ParsedCsv {
   delimiter: string;
 }
 
+/**
+ * A cell Excel, Numbers or Google Sheets would run as a formula (=, +, -, @ at the start) gets a leading
+ * apostrophe, so text from a feed or an import can't become a live formula in an exported file.
+ * Plain numbers like -250 are left alone. readCsv takes the apostrophe off again.
+ */
+export function csvSafe(v: unknown): string {
+  const s = v === null || v === undefined ? "" : String(v);
+  if (/^[=+\-@\t\r]/.test(s) && !/^[-+]?\d+(\.\d+)?$/.test(s.trim())) return `'${s}`;
+  return s;
+}
+
 export function readCsv(text: string): ParsedCsv {
   const clean = text.replace(/^﻿/, "");
   const r = Papa.parse<Record<string, string>>(clean, {
@@ -108,6 +119,8 @@ export function readCsv(text: string): ParsedCsv {
     transformHeader: (h) => h.replace(/^﻿/, "").trim(),
   });
   const headers = (r.meta.fields ?? []).filter((h) => h !== "");
+  // Undo csvSafe: '=SUM(…) written by an export reads back as =SUM(…) text.
+  for (const row of r.data) for (const k in row) if (typeof row[k] === "string" && /^'[=+\-@\t\r]/.test(row[k])) row[k] = row[k].slice(1);
   return { headers, rows: r.data, delimiter: r.meta.delimiter };
 }
 
@@ -433,7 +446,7 @@ export function exportGrantsCsv(grants: Grant[], funderName: (slug: string) => s
       row[`report_${i + 1}_title`] = r.title;
       row[`report_${i + 1}_due`] = r.due;
     });
-    return headers.map((h) => row[h] ?? "");
+    return headers.map((h) => csvSafe(row[h] ?? ""));
   });
   return "﻿" + Papa.unparse({ fields: headers, data }) + "\n";
 }

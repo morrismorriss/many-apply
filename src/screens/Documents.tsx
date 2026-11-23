@@ -53,7 +53,7 @@ export function ExpiryText({ d }: { d: VaultDocument }) {
   );
 }
 
-export function Documents() {
+export function Documents({ tabs }: { tabs?: React.ReactNode } = {}) {
   const data = useStore((s) => s.data!);
   const clientFilter = useStore((s) => s.clientFilter);
   const open = useStore((s) => s.openDrawer);
@@ -80,7 +80,7 @@ export function Documents() {
     <div className="page wide">
       <div className="page-head">
         <div>
-          <h1>Documents</h1>
+          <h1>{tabs ? "Library" : "Documents"}</h1>
           <div className="sub">Contracts, tax forms and legal paperwork that applications ask for again and again.</div>
         </div>
         <span className="spacer" />
@@ -90,6 +90,7 @@ export function Documents() {
         </label>
         <button className="btn primary" onClick={() => void add.pick(target)}>+ Add documents</button>
       </div>
+      {tabs && <div className="lib-tabs">{tabs}</div>}
 
       {noteHidden ? (
         <p className="small muted" style={{ marginTop: -12 }}>
