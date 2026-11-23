@@ -28,7 +28,7 @@ import { writeSample, type WorkSample } from "./lib/samples";
 import { writeDocument, type VaultDocument } from "./lib/documents";
 
 export type ScreenId =
-  | "dashboard" | "research" | "pipeline" | "calendar" | "library" | "documents" | "funders" | "clients" | "giving" | "reports" | "import" | "settings";
+  | "dashboard" | "research" | "pipeline" | "calendar" | "library" | "cv" | "documents" | "funders" | "clients" | "giving" | "reports" | "import" | "settings";
 
 export type Route =
   | { screen: ScreenId }
@@ -121,7 +121,8 @@ let unwatch: (() => void) | null = null;
 let lastOwnWrite = 0;
 let toastId = 0;
 
-function markWrite() {
+/** Note a write the app made itself, so the folder watcher doesn't reload for it. */
+export function markWrite() {
   lastOwnWrite = Date.now();
 }
 

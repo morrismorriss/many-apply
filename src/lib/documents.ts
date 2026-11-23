@@ -5,6 +5,7 @@
 import { parseFrontmatter, stringifyFrontmatter } from "./frontmatter";
 import { basename, dirname, joinPath, type VaultFS } from "./fs/types";
 import { extOf } from "./samples";
+import { moveWithFile, renameGrantReferences } from "./move";
 import { asArray, daysUntil, slugify, str } from "./util";
 
 export const DOC_TYPES = [
@@ -138,6 +139,16 @@ export async function setDocumentFile(
   await picked.copyTo(`documents/${joinPath(folder, name)}`);
   const next = { ...d, fm: { ...d.fm, file: name } };
   await writeDocument(fs, next);
+  return next;
+}
+
+/** Move a document (and its file) into another client's folder, keeping applications that list it pointed at it. */
+export async function moveDocument(fs: VaultFS, d: VaultDocument, owner: string): Promise<VaultDocument> {
+  if (documentOwner(d) === owner) return d;
+  const moved = await moveWithFile(fs, "documents", d.path, d.fm.file, owner);
+  const next: VaultDocument = { ...d, path: moved.path, fm: { ...d.fm, file: moved.file } };
+  await writeDocument(fs, next);
+  await renameGrantReferences(fs, "documents", d.path, next.path);
   return next;
 }
 

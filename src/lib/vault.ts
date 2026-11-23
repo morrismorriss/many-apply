@@ -22,11 +22,12 @@ import { readDonor, type Donor } from "./donors";
 import { readSample, type WorkSample } from "./samples";
 import { readDocument, type VaultDocument } from "./documents";
 import { mergeFeeds } from "./feeds";
+import { renameGrantReferences } from "./move";
 
 export const GRANT_ORDER = [
   "title", "client", "funder", "url", "type", "status", "starred", "amount_requested", "amount_awarded",
   "max_award", "currency", "deadline", "deadline_type", "project", "location", "tags", "submitted_on",
-  "decision_expected", "decision_on", "todoist_task_ids", "reports", "work_samples", "created", "updated", "status_history", "time_log",
+  "decision_expected", "decision_on", "todoist_task_ids", "reports", "work_samples", "library_items", "documents", "created", "updated", "status_history", "time_log",
 ];
 const FUNDER_ORDER = ["name", "website", "funder_type", "contacts", "notes"];
 const CLIENT_ORDER = [
@@ -101,6 +102,8 @@ export function normalizeGrant(raw: Record<string, unknown>, folder: string): Gr
     todoist_task_ids: asArray(raw.todoist_task_ids),
     reports,
     work_samples: asArray(raw.work_samples),
+    library_items: asArray(raw.library_items),
+    documents: asArray(raw.documents),
     created: dateStr(raw.created) || todayISO(),
     updated: dateStr(raw.updated) || todayISO(),
     status_history: history.length ? history : [{ status, date: dateStr(raw.created) || todayISO() }],
@@ -423,6 +426,7 @@ export async function loadSettings(fs: VaultFS): Promise<Settings> {
       todoist: { ...DEFAULT_SETTINGS.todoist, ...(raw.todoist ?? {}) },
       feeds: mergeFeeds(raw.feeds),
       dataColors: raw.dataColors && typeof raw.dataColors === "object" ? raw.dataColors : {},
+      hiddenReports: Array.isArray(raw.hiddenReports) ? raw.hiddenReports.filter((x: unknown) => typeof x === "string") : [],
     };
   } catch {
     return structuredClone(DEFAULT_SETTINGS);
@@ -577,7 +581,16 @@ export async function moveLibraryItem(fs: VaultFS, path: string, toFolder: strin
   let i = 2;
   while (await fs.exists(`library/${dest}`)) dest = joinPath(toFolder, basename(path).replace(/\.md$/, `-${i++}.md`));
   await fs.rename(`library/${path}`, `library/${dest}`);
+  await renameGrantReferences(fs, "library_items", path, dest);
   return dest;
+}
+
+/** Undo recordUsedIn, when an answer is taken off an application. */
+export async function removeUsedIn(fs: VaultFS, item: LibraryItem, grantFolder: string): Promise<LibraryItem> {
+  if (!item.fm.used_in.includes(grantFolder)) return item;
+  const next = { ...item, fm: { ...item.fm, used_in: item.fm.used_in.filter((u) => u !== grantFolder) } };
+  await writeLibrary(fs, next);
+  return next;
 }
 
 /** Record that a library item was used in a grant. */

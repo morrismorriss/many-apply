@@ -3,7 +3,7 @@ import { useLookups, useStore } from "../store";
 import { createLibraryItem, moveLibraryItem } from "../lib/vault";
 import { searchLibrary } from "../lib/library";
 import { askText } from "../components/dialogs";
-import { Empty, Tags } from "../components/ui";
+import { Empty, MenuButton, Tags } from "../components/ui";
 import { slugify } from "../lib/util";
 import { getPref, setPref } from "../lib/platform";
 import { SamplesView } from "./Samples";
@@ -44,6 +44,7 @@ function Answers({ tabs }: { tabs: React.ReactNode }) {
   const [tag, setTag] = useState("");
   const [dragging, setDragging] = useState<string | null>(null);
   const [dropOn, setDropOn] = useState<string | null>(null);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
 
   const roots = ["shared", ...data.clients.map((c) => c.slug)].filter((r) => !clientFilter || r === clientFilter || r === "shared");
   const folders = data.libraryFolders.filter((f) => roots.includes(f.split("/")[0]));
@@ -77,6 +78,21 @@ function Answers({ tabs }: { tabs: React.ReactNode }) {
     const dest = await mutate((fs) => moveLibraryItem(fs, from, target));
     toast(`Moved to ${label(target)}`);
     if (useStore.getState().drawer?.id === from) open({ kind: "library", id: dest });
+  };
+
+  const allFolders = [...new Set([...roots, ...folders])].sort((a, b) => {
+    const rank = (f: string) => (f.startsWith("shared") ? 0 : f.split("/")[0] === "me" ? 1 : 2);
+    return rank(a) - rank(b) || a.localeCompare(b);
+  });
+  const fullLabel = (f: string) => f.split("/").map((_, i, parts) => label(parts.slice(0, i + 1).join("/"))).join(" / ");
+  const selected = items.filter((i) => picked.has(i.path));
+  const moveSelected = async (target: string) => {
+    const moving = selected.filter((i) => i.path.slice(0, i.path.lastIndexOf("/")) !== target);
+    await mutate(async (fs) => {
+      for (const i of moving) await moveLibraryItem(fs, i.path, target);
+    });
+    setPicked(new Set());
+    toast(`Moved ${moving.length} answer${moving.length === 1 ? "" : "s"} to ${fullLabel(target)}`);
   };
 
   const renderNode = (f: string, depth: number): React.ReactNode => {
@@ -156,7 +172,7 @@ function Answers({ tabs }: { tabs: React.ReactNode }) {
           {(children.get("") ?? [])
             .sort((a, b) => (a === "shared" ? -1 : b === "shared" ? 1 : a === "me" ? -1 : b === "me" ? 1 : a.localeCompare(b)))
             .map((f) => renderNode(f, 0))}
-          <p className="muted small" style={{ padding: "8px 6px 0" }}>Drag an answer onto a folder to move it.</p>
+          <p className="muted small" style={{ padding: "8px 6px 0" }}>Drag an answer onto a folder to move it, or tick several and use "Move to".</p>
         </div>
         <div>
           <div className="toolbar">
@@ -165,6 +181,16 @@ function Answers({ tabs }: { tabs: React.ReactNode }) {
               <option value="">All tags</option>
               {tags.map((t) => <option key={t}>{t}</option>)}
             </select>
+            {selected.length > 0 && (
+              <>
+                <MenuButton
+                  label={`Move ${selected.length} to…`}
+                  className="btn small"
+                  items={allFolders.map((f) => ({ label: fullLabel(f), run: () => void moveSelected(f) }))}
+                />
+                <button className="btn small ghost" onClick={() => setPicked(new Set())}>Clear</button>
+              </>
+            )}
           </div>
           {items.length === 0 ? (
             <Empty title="No answers here">
@@ -175,6 +201,14 @@ function Answers({ tabs }: { tabs: React.ReactNode }) {
               <table className="table">
                 <thead>
                   <tr>
+                    <th style={{ width: 28 }}>
+                      <input
+                        type="checkbox"
+                        aria-label="Select all"
+                        checked={selected.length > 0 && selected.length === items.length}
+                        onChange={(e) => setPicked(e.target.checked ? new Set(items.map((i) => i.path)) : new Set())}
+                      />
+                    </th>
                     <th>Title</th>
                     <th>Folder</th>
                     <th>Tags</th>
@@ -198,6 +232,19 @@ function Answers({ tabs }: { tabs: React.ReactNode }) {
                       }}
                       onClick={() => open({ kind: "library", id: i.path })}
                     >
+                      <td onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${i.fm.title}`}
+                          checked={picked.has(i.path)}
+                          onChange={(e) => {
+                            const next = new Set(picked);
+                            if (e.target.checked) next.add(i.path);
+                            else next.delete(i.path);
+                            setPicked(next);
+                          }}
+                        />
+                      </td>
                       <td style={{ fontWeight: 550 }}>{i.fm.title}</td>
                       <td className="soft small">{i.path.split("/").slice(0, -1).map((p, n) => (n === 0 ? label(p) : p)).join(" / ")}</td>
                       <td><Tags tags={i.fm.tags} /></td>

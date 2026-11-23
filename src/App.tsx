@@ -1,3 +1,4 @@
+import { CvBuilder } from "./screens/CvBuilder";
 import { useEffect, useLayoutEffect } from "react";
 import { useStore } from "./store";
 import { Sidebar } from "./components/Sidebar";
@@ -100,6 +101,7 @@ export default function App() {
     case "pipeline": screen = <Pipeline />; break;
     case "calendar": screen = <CalendarScreen />; break;
     case "library": screen = <Library />; break;
+    case "cv": screen = <CvBuilder />; break;
     case "documents": screen = <Documents />; break;
     case "funders": screen = <Funders />; break;
     case "clients": screen = <Clients />; break;

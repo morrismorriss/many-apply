@@ -57,7 +57,7 @@ export function droppedFiles(list: FileList | File[]): PickedFile[] {
 export async function pickFiles(extensions: string[], title = "Choose files"): Promise<PickedFile[]> {
   if (isTauri) {
     const { open } = await import("@tauri-apps/plugin-dialog");
-    const r = await open({ multiple: true, title, filters: [{ name: "Work samples", extensions }] });
+    const r = await open({ multiple: true, title, filters: [{ name: "Files", extensions }] });
     const paths = Array.isArray(r) ? r : typeof r === "string" ? [r] : [];
     return paths.map((path) => ({
       name: path.split(/[\\/]/).pop() || path,

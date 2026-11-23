@@ -1,9 +1,10 @@
 import { DATA_COLOR_KEYS, DATA_COLOR_LABEL, DATA_PALETTES, dataColor, type DataColorKey } from "../lib/charts";
 import { useEffect, useState } from "react";
 import { useStore } from "../store";
-import { getSecret, isTauri, pickFolder, saveFile, setSecret } from "../lib/platform";
+import { errorText, getSecret, isTauri, pickFolder, saveFile, setSecret } from "../lib/platform";
 import { TOKEN_KEY, testToken } from "../lib/todoist";
 import { zipVault } from "../lib/backup";
+import { zipExtension } from "../lib/extensionZip";
 import { BRIDGE_PORT, newPairingCode, syncPairingCode } from "../lib/bridge";
 import { confirmAction } from "../components/dialogs";
 import type { Settings } from "../lib/model";
@@ -113,6 +114,30 @@ export function SettingsScreen() {
           Save grants from any web page. The extension talks only to this app, on <code>127.0.0.1:{BRIDGE_PORT}</code>. Nothing leaves your computer.
           {!isTauri && " (Available in the desktop app.)"}
         </p>
+        <div className="row" style={{ marginBottom: 12 }}>
+          <button
+            className="btn primary"
+            onClick={async () => {
+              try {
+                const p = await saveFile("many-apply-extension.zip", await zipExtension(), "application/zip");
+                if (p) toast("Extension saved. Unzip it, then follow the steps below.");
+              } catch (e) {
+                toast(`Couldn't save the extension: ${errorText(e)}`, "error");
+              }
+            }}
+          >
+            Download the extension…
+          </button>
+          <span className="muted small">A zip for Chrome, Edge, Brave or Arc.</span>
+        </div>
+        <ol className="small soft" style={{ margin: "0 0 12px", paddingLeft: 20, lineHeight: 1.6 }}>
+          <li>Unzip <code>many-apply-extension.zip</code> and keep the folder somewhere it won't be deleted, like Documents. Chrome loads it from there.</li>
+          <li>In Chrome, go to <code>chrome://extensions</code> (type it in the address bar).</li>
+          <li>Turn on <strong>Developer mode</strong>, top right.</li>
+          <li>Click <strong>Load unpacked</strong> and choose the <code>many-apply-extension</code> folder.</li>
+          <li>Click the puzzle-piece icon in the toolbar and pin <strong>Many Apply: Save grant</strong>.</li>
+          <li>Click the extension and enter the pairing code below.</li>
+        </ol>
         <div className="row">
           <span className="soft">Pairing code</span>
           <code style={{ fontSize: 18, letterSpacing: "0.15em", padding: "4px 10px" }}>{s.pairingCode || "——————"}</code>
@@ -128,6 +153,10 @@ export function SettingsScreen() {
             New code
           </button>
         </div>
+        <p className="muted small" style={{ marginBottom: 0 }}>
+          To update the extension, download it again, replace the folder's contents and click the reload arrow on its card in <code>chrome://extensions</code>.
+          Grants you save while Many Apply is closed wait in the extension until it opens.
+        </p>
       </Section>
 
       {s.importPresets.length > 0 && (

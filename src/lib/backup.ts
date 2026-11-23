@@ -21,6 +21,7 @@ export async function zipClient(fs: VaultFS, client: string, grantFolders: strin
   if (await fs.exists(`clients/${client}.md`)) zip.file(`clients/${client}.md`, await fs.readBytes(`clients/${client}.md`));
   for (const g of grantFolders) await addTree(zip, fs, `grants/${g}`);
   await addTree(zip, fs, `library/${client}`);
+  if (await fs.exists(`cv/${client}.md`)) zip.file(`cv/${client}.md`, await fs.readBytes(`cv/${client}.md`));
   zip.file(
     "README.txt",
     `Exported from Many Apply on ${new Date().toDateString()}.\nThese are plain markdown and CSV files. Open them in any text editor, or point Many Apply at this folder.\n`,

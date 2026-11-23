@@ -92,6 +92,10 @@ export interface GrantFM {
   reports: ReportDate[];
   /** Work samples sent with this application, as paths relative to samples/. */
   work_samples: string[];
+  /** Library answers attached to this application, as paths relative to library/. */
+  library_items: string[];
+  /** Documents (W-9, 501(c)(3) letter…) sent with this application, as paths relative to documents/. */
+  documents: string[];
   created: string;
   updated: string;
   status_history: StatusEvent[];
@@ -215,6 +219,8 @@ export interface Settings {
   feeds: FeedSource[];
   /** Chart and status colours that override the theme's, keyed like "st-awarded" or "ev-report". */
   dataColors: Record<string, string>;
+  /** Report panels turned off on the Reports screen. */
+  hiddenReports: string[];
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -237,6 +243,7 @@ export const DEFAULT_SETTINGS: Settings = {
   pairingCode: "",
   feeds: DEFAULT_FEEDS.map((f) => ({ ...f })),
   dataColors: {},
+  hiddenReports: [],
 };
 
 export const ME = "me";

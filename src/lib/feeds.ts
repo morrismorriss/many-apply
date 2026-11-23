@@ -16,15 +16,6 @@ export interface FeedSource {
 
 export const DEFAULT_FEEDS: FeedSource[] = [
   {
-    id: "grants-gov",
-    name: "Grants.gov: new federal opportunities",
-    url: "https://www.grants.gov/rss/GG_NewOppByCategory.xml",
-    enabled: true,
-    // The federal feed covers every field, so it starts filtered to the arts.
-    match: "arts, artist, humanities, museum, theater, theatre, music, dance, cultural, creative",
-    builtin: true,
-  },
-  {
     id: "artdeadline",
     name: "ArtDeadline: grants",
     url: "https://artdeadline.com/ops-type/type-grants/feed/",
@@ -42,12 +33,17 @@ export const DEFAULT_FEEDS: FeedSource[] = [
   },
 ];
 
+/** Built-in feeds that were removed (Grants.gov's RSS stopped working). Dropped from saved settings. */
+const RETIRED_FEEDS = ["grants-gov"];
+const GRANTS_GOV_URL = "https://www.grants.gov/rss/GG_NewOppByCategory.xml";
+
 /** Settings saved before feeds existed get the defaults; built-in feeds added later are appended. */
 export function mergeFeeds(saved: FeedSource[] | undefined): FeedSource[] {
   if (!Array.isArray(saved)) return DEFAULT_FEEDS.map((f) => ({ ...f }));
   const out = saved.filter((f) => f && typeof f.url === "string").map((f) => ({ ...f, match: f.match ?? "", enabled: f.enabled !== false }));
   for (const d of DEFAULT_FEEDS) if (!out.some((f) => f.id === d.id)) out.push({ ...d });
-  return out;
+  // Feeds Many Apply used to suggest but no longer works with. Ones the user added stay.
+  return out.filter((f) => !(RETIRED_FEEDS.includes(f.id) && (f.builtin || f.url === GRANTS_GOV_URL)));
 }
 
 export interface FeedItem {

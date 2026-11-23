@@ -8,6 +8,7 @@ import {
   SAMPLE_KINDS,
   SAMPLE_KIND_LABEL,
   duplicateSample,
+  moveSample,
   kindForUrl,
   previewMime,
   sampleCaption,
@@ -36,6 +37,16 @@ export function SampleDrawer({ path }: { path: string }) {
   const set = (patch: Partial<WorkSample["fm"]>) => save({ ...s, fm: { ...s.fm, ...patch } });
   const file = sampleFilePath(s);
   const visual = s.fm.kind === "image" || s.fm.kind === "document";
+  const move = async (to: string) => {
+    if (to === owner) return;
+    try {
+      const next = await mutate((v) => moveSample(v, s, to));
+      open({ kind: "sample", id: next.path });
+      toast(`Moved to ${to === "shared" ? "Shared" : clients.find((c) => c.slug === to)?.fm.name ?? to}`);
+    } catch (e) {
+      toast(`Couldn't move it: ${errorText(e)}`, "error");
+    }
+  };
 
   return (
     <div>
@@ -80,6 +91,13 @@ export function SampleDrawer({ path }: { path: string }) {
 
       <section>
         <div className="props">
+          <div className="k">Folder</div>
+          <div className="v">
+            <select className="select inline" aria-label="Folder" value={owner} onChange={(e) => void move(e.target.value)}>
+              <option value="shared">Shared</option>
+              {clients.map((c) => <option key={c.slug} value={c.slug}>{c.fm.name}</option>)}
+            </select>
+          </div>
           <div className="k">Kind</div>
           <div className="v">
             <InlineSelect value={s.fm.kind} options={SAMPLE_KINDS} labels={SAMPLE_KIND_LABEL} onSave={(kind) => set({ kind })} />

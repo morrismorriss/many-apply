@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "../store";
 import { useFeeds } from "../lib/feedStore";
 import { DEFAULT_FEEDS, itemToGrant, matchesFilter, type FeedItem, type FeedSource } from "../lib/feeds";
-import { openExternal } from "../lib/platform";
+import { errorText, openExternal } from "../lib/platform";
 import { defaultGrantBody, setBodySection } from "../lib/vault";
 import { fmtDate, slugify } from "../lib/util";
 import { confirmAction } from "./dialogs";
@@ -39,6 +39,8 @@ export function FeedsPanel() {
   const [managing, setManaging] = useState(false);
   const [seenBefore] = useState(seenAt);
   const feeds = settings.feeds;
+  const savingRef = useRef(new Set<string>());
+  const [saving, setSaving] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!loadedAt && !loading) void refresh(feeds);
@@ -56,13 +58,25 @@ export function FeedsPanel() {
   const hiddenCount = items.filter((i) => hidden.has(i.id)).length;
 
   const save = async (i: FeedItem) => {
-    const f = byId.get(i.feedId);
-    const g = itemToGrant(i, f?.name ?? "a feed");
-    const created = await addGrant(
-      { title: g.title, url: g.url, deadline: g.deadline, max_award: g.max_award, status: "researching" },
-      setBodySection(defaultGrantBody(), "Eligibility", g.eligibility),
-    );
-    toast("Saved to Research", "ok", { label: "Open", run: () => openDrawer({ kind: "grant", id: created.folder }) });
+    // Saving writes files and reloads the vault, which can take a moment: ignore repeat clicks
+    // (the ref stops a second click that lands before React re-renders the button).
+    if (savingRef.current.has(i.id) || (i.link && savedUrls.has(i.link))) return;
+    savingRef.current.add(i.id);
+    setSaving(new Set(savingRef.current));
+    try {
+      const f = byId.get(i.feedId);
+      const g = itemToGrant(i, f?.name ?? "a feed");
+      const created = await addGrant(
+        { title: g.title, url: g.url, deadline: g.deadline, max_award: g.max_award, status: "researching" },
+        setBodySection(defaultGrantBody(), "Eligibility", g.eligibility),
+      );
+      toast("Saved to Research", "ok", { label: "Open", run: () => openDrawer({ kind: "grant", id: created.folder }) });
+    } catch (e) {
+      toast(`Couldn't save it: ${errorText(e)}`, "error");
+      savingRef.current.delete(i.id);
+    } finally {
+      setSaving(new Set(savingRef.current));
+    }
   };
 
   const setFeeds = (next: FeedSource[]) => updateSettings((s) => ({ ...s, feeds: next }));
@@ -144,7 +158,9 @@ export function FeedsPanel() {
                       {saved ? (
                         <button className="btn small ghost" onClick={() => openDrawer({ kind: "grant", id: saved })}>In Research ✓</button>
                       ) : (
-                        <button className="btn small" onClick={() => void save(i)}>Save to Research</button>
+                        <button className="btn small" disabled={saving.has(i.id)} onClick={() => void save(i)}>
+                          {saving.has(i.id) ? "Saving…" : "Save to Research"}
+                        </button>
                       )}
                       <span className="grow" />
                       <button className="btn small ghost" title="Hide this item" onClick={() => hide(i.id)}>Hide</button>
