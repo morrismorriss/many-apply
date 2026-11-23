@@ -1,3 +1,4 @@
+import { FeedsPanel } from "./components/FeedsPanel";
 import { CvBuilder } from "./screens/CvBuilder";
 import { useEffect, useLayoutEffect } from "react";
 import { useStore } from "./store";
@@ -101,6 +102,7 @@ export default function App() {
     case "calendar": screen = <CalendarScreen />; break;
     case "library": screen = <Library />; break;
     case "cv": screen = <CvBuilder />; break;
+    case "feeds": screen = <FeedsPanel />; break;
     case "documents": screen = <Library key="documents" initialTab="documents" />; break;
     case "libraryBudget": screen = <BudgetBuilder key={route.file} file={route.file} />; break;
     case "funders": screen = <Funders />; break;

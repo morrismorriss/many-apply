@@ -28,7 +28,7 @@ import { writeSample, type WorkSample } from "./lib/samples";
 import { writeDocument, type VaultDocument } from "./lib/documents";
 
 export type ScreenId =
-  | "dashboard" | "research" | "pipeline" | "calendar" | "library" | "cv" | "documents" | "funders" | "clients" | "giving" | "reports" | "import" | "settings";
+  | "dashboard" | "research" | "pipeline" | "calendar" | "library" | "cv" | "documents" | "feeds" | "funders" | "clients" | "giving" | "reports" | "import" | "settings";
 
 export type Route =
   | { screen: ScreenId }
@@ -43,8 +43,7 @@ export type DrawerTarget =
   | { kind: "donor"; id: string }
   | { kind: "library"; id: string }
   | { kind: "sample"; id: string }
-  | { kind: "document"; id: string }
-  | { kind: "feeds"; id: string };
+  | { kind: "document"; id: string };
 
 interface Toast {
   id: number;

@@ -157,6 +157,22 @@ export function matchesFilter(item: FeedItem, match: string): boolean {
   return words.some((w) => new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i").test(hay));
 }
 
+/** How long a feed item stays in the list. Older ones (and ones whose deadline has passed) are dropped. */
+export const FEED_MAX_AGE_DAYS = 60;
+
+/**
+ * An item is stale when it was published more than FEED_MAX_AGE_DAYS ago, or when every date it mentions
+ * (a deadline, usually) is already past. Stale items are dropped on refresh, unless they were saved to
+ * Research, where they live on as applications.
+ */
+export function isStaleFeedItem(item: FeedItem, today = new Date(), maxAgeDays = FEED_MAX_AGE_DAYS): boolean {
+  const published = item.date ? Date.parse(item.date) : NaN;
+  if (!isNaN(published) && today.getTime() - published > maxAgeDays * 86400000) return true;
+  const iso = today.toISOString().slice(0, 10);
+  const dates = findDates(`${item.title}\n${item.summary}`);
+  return dates.length > 0 && dates.every((d) => d.iso < iso);
+}
+
 /** What "Save to Research" pre-fills: the deadline and amount it can spot, and the summary as eligibility notes. */
 export function itemToGrant(item: FeedItem, feedName: string) {
   const text = `${item.title}\n${item.summary}`;

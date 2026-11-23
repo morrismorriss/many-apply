@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLookups, useStore } from "../store";
 import { useFeeds } from "../lib/feedStore";
-import { DEFAULT_FEEDS, itemToGrant, matchesFilter, type FeedItem, type FeedSource } from "../lib/feeds";
+import { DEFAULT_FEEDS, FEED_MAX_AGE_DAYS, itemToGrant, matchesFilter, type FeedItem, type FeedSource } from "../lib/feeds";
 import { errorText, openExternal } from "../lib/platform";
 import { defaultGrantBody, setBodySection } from "../lib/vault";
 import { fmtDate, slugify } from "../lib/util";
@@ -49,6 +49,7 @@ export function FeedsPanel() {
   const [saveFor, setSaveFor] = useState(clientFilter || ME);
   useEffect(() => setSaveFor(clientFilter || ME), [clientFilter]);
   const [saving, setSaving] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!loadedAt && !loading) void refresh(feeds);
@@ -91,9 +92,11 @@ export function FeedsPanel() {
   const patchFeed = (id: string, patch: Partial<FeedSource>) => setFeeds(feeds.map((f) => (f.id === id ? { ...f, ...patch } : f)));
 
   return (
-    <div>
-      <div className="row">
-        <h2 className="drawer-title" style={{ margin: 0 }}>Opportunity feeds</h2>
+    <div className="page" style={{ maxWidth: 960 }}>
+      <div className="page-head" style={{ marginBottom: 8 }}>
+        <div>
+          <h1>Opportunity feeds</h1>
+        </div>
         <span className="grow" />
         <button className="btn small" disabled={loading} onClick={() => void refresh(feeds)}>
           {loading ? "Loading…" : "Refresh"}
@@ -108,9 +111,10 @@ export function FeedsPanel() {
           {managing ? "Done" : "Manage feeds"}
         </button>
       </div>
-      <p className="muted small" style={{ marginTop: 6 }}>
+      <p className="muted small" style={{ marginTop: 0 }}>
         New grants and open calls from the feeds you choose. Feeds are only read: nothing about you is sent, and nothing is saved until you
-        click Save to Research.
+        click Save to Research. To keep things light, items older than {FEED_MAX_AGE_DAYS} days or past their deadline drop off by
+        themselves; anything you save stays in Research.
       </p>
 
       {demo && !managing && (
@@ -167,7 +171,26 @@ export function FeedsPanel() {
                       {byId.get(i.feedId)?.name}
                       {i.date && ` · ${fmtDate(i.date.slice(0, 10), { year: true })}`}
                     </div>
-                    {i.summary && <p className="small soft feed-summary">{i.summary}</p>}
+                    {i.summary && (
+                      <>
+                        <p className={`soft feed-summary${expanded.has(i.feedId + i.id) ? " open" : ""}`}>{i.summary}</p>
+                        {i.summary.length > 480 && (
+                          <button
+                            className="btn small ghost"
+                            style={{ marginLeft: -8 }}
+                            onClick={() => {
+                              const k = i.feedId + i.id;
+                              const next = new Set(expanded);
+                              if (next.has(k)) next.delete(k);
+                              else next.add(k);
+                              setExpanded(next);
+                            }}
+                          >
+                            {expanded.has(i.feedId + i.id) ? "Show less" : "Show more"}
+                          </button>
+                        )}
+                      </>
+                    )}
                     <div className="row" style={{ marginTop: 6 }}>
                       {saved ? (
                         <button className="btn small ghost" onClick={() => openDrawer({ kind: "grant", id: saved })}>In Research ✓</button>
