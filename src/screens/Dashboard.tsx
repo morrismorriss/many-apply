@@ -93,7 +93,7 @@ export function Dashboard() {
                         <span className="ic" style={{ ["--c" as string]: "var(--warn)" }}>⚿</span>
                         <div className="grow" style={{ minWidth: 0 }}>
                           <div className="ellipsis" style={{ fontWeight: 550 }}>
-                            {d.fm.title} <ClientLabel slug={documentOwner(d)} hideMe />
+                            {d.fm.title} <ClientLabel slug={documentOwner(d)} />
                           </div>
                           <div className="small soft">{n !== null && n < 0 ? `Expired ${relDays(n)}` : `Expires ${relDays(n)}`}. Get a new one.</div>
                         </div>
@@ -108,7 +108,7 @@ export function Dashboard() {
                       </span>
                       <div className="grow" style={{ minWidth: 0 }}>
                         <div className="ellipsis" style={{ fontWeight: 550 }}>
-                          {a.grant.fm.title} <ClientLabel slug={a.grant.fm.client} hideMe />
+                          {a.grant.fm.title} <ClientLabel slug={a.grant.fm.client} />
                         </div>
                         <div className="small soft">{a.text}</div>
                       </div>
