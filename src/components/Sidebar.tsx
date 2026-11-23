@@ -1,17 +1,27 @@
 import { useStore, useGrants, type ScreenId } from "../store";
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
 import { TimerChip } from "./ui";
 import { useNewFeedCount } from "./FeedsPanel";
 import { useFeeds } from "../lib/feedStore";
 
 // Grouped by what you're doing: your day, applications, the material you reuse, the people and money,
 // then looking back and setting up. A small gap separates the groups.
-const NAV: { id: ScreenId; label: string; icon: string; groupStart?: boolean }[] = [
+/** Books on a shelf, drawn in the text colour so it matches the symbol icons. */
+const LibraryIcon = (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" style={{ display: "block", margin: "0 auto" }}>
+    <rect x="1.5" y="2.5" width="3" height="11" />
+    <rect x="5.5" y="1.5" width="3" height="12" />
+    <path d="M10 3.2 12.8 2.6 15 13 12.2 13.6Z" />
+    <path d="M1 14.5h14" strokeLinecap="round" />
+  </svg>
+);
+
+const NAV: { id: ScreenId; label: string; icon: ReactNode; groupStart?: boolean }[] = [
   { id: "dashboard", label: "Dashboard", icon: "◧" },
   { id: "research", label: "Research", icon: "⌕", groupStart: true },
   { id: "pipeline", label: "Pipeline", icon: "▥" },
   { id: "calendar", label: "Calendar", icon: "▦" },
-  { id: "library", label: "Library", icon: "❏", groupStart: true },
+  { id: "library", label: "Library", icon: LibraryIcon, groupStart: true },
   { id: "cv", label: "CV", icon: "✎" },
   { id: "funders", label: "Funders", icon: "⌂", groupStart: true },
   { id: "clients", label: "Clients", icon: "☺" },
