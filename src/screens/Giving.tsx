@@ -13,10 +13,11 @@ import {
   undoDonorImport,
 } from "../lib/donorImport";
 import type { DateOrder } from "../lib/extract";
-import { errorText, pickFile } from "../lib/platform";
+import { errorText, pickFile, saveFile } from "../lib/platform";
+import { donorsCsv, giftsCsv } from "../lib/donorExport";
 import { DONOR_STAGES, DONOR_STAGE_LABEL, donorsFor, looksLapsed, summarize, type DonorStage } from "../lib/donors";
 import { ME } from "../lib/model";
-import { fmtDate, fmtMoney, todayISO } from "../lib/util";
+import { fmtDate, fmtMoney, slugify, todayISO } from "../lib/util";
 
 const STAGE_SHADE: Record<DonorStage, string> = {
   prospect: "var(--st-researching)",
@@ -51,6 +52,7 @@ export function Giving() {
   const [sort, setSort] = useState<Sort>("followup");
   const toast = useStore((s) => s.toast);
   const [csv, setCsv] = useState<(ParsedCsv & { name: string }) | null>(null);
+  const [exporting, setExporting] = useState(false);
   const today = todayISO();
   const year = new Date().getFullYear();
 
@@ -107,6 +109,7 @@ export function Giving() {
 
   return (
     <div className="page wide">
+      {exporting && <DonorExportDialog initialClient={clientFilter} onClose={() => setExporting(false)} />}
       {csv && <DonorImportDialog csv={csv} initialClient={clientFilter || ME} onClose={() => setCsv(null)} />}
       <div className="page-head">
         <div>
@@ -114,6 +117,9 @@ export function Giving() {
           <div className="sub">The people who give to your work: gifts, thank-yous and the next follow-up.</div>
         </div>
         <span className="spacer" />
+        <button className="btn" disabled={allDonors.length === 0} onClick={() => setExporting(true)} title="Save donors or gifts as a spreadsheet">
+          Export CSV…
+        </button>
         <button className="btn" onClick={() => void importCsv()} title="Donors and gifts from PayPal, Stripe, Givebutter or a spreadsheet">
           Import CSV…
         </button>
@@ -342,6 +348,81 @@ function DonorImportDialog({ csv, initialClient, onClose }: { csv: ParsedCsv & {
             )}
           </>
         )}
+      </div>
+    </Modal>
+  );
+}
+
+function DonorExportDialog({ initialClient, onClose }: { initialClient: string; onClose: () => void }) {
+  const all = useStore((s) => s.data!.donors);
+  const clients = useStore((s) => s.data!.clients);
+  const toast = useStore((s) => s.toast);
+  const { clientName } = useLookups();
+  const [who, setWho] = useState(initialClient);
+  const [kind, setKind] = useState<"donors" | "gifts">("donors");
+  const donors = donorsFor(all, who);
+  const gifts = donors.reduce((n, d) => n + d.fm.gifts.length, 0);
+  const count = kind === "donors" ? donors.length : gifts;
+
+  const run = async () => {
+    const text = kind === "donors" ? donorsCsv(donors, clientName) : giftsCsv(donors, clientName);
+    const name = `${kind}-${who ? slugify(clientName(who)) : "all-clients"}-${todayISO()}.csv`;
+    try {
+      const p = await saveFile(name, text, "text/csv");
+      if (p) {
+        toast(`Exported ${count} ${kind === "donors" ? (count === 1 ? "donor" : "donors") : count === 1 ? "gift" : "gifts"}`);
+        onClose();
+      }
+    } catch (e) {
+      toast(`Couldn't export: ${errorText(e)}`, "error");
+    }
+  };
+
+  return (
+    <Modal
+      title="Export Individual Giving"
+      width={520}
+      onClose={onClose}
+      actions={
+        <>
+          <button className="btn ghost" onClick={onClose}>Cancel</button>
+          <button className="btn primary" disabled={count === 0} onClick={() => void run()}>Export {count}</button>
+        </>
+      }
+    >
+      <div className="stack" style={{ gap: 14 }}>
+        <label className="field" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <span className="soft small">Whose donors</span>
+          <select className="select" value={who} onChange={(e) => setWho(e.target.value)}>
+            <option value="">All clients</option>
+            {clients.map((c) => (
+              <option key={c.slug} value={c.slug}>
+                {c.fm.name} ({donorsFor(all, c.slug).length})
+              </option>
+            ))}
+          </select>
+        </label>
+        <div>
+          <div className="soft small" style={{ marginBottom: 6 }}>What to export</div>
+          <label className="check" style={{ marginBottom: 6 }}>
+            <input type="radio" name="kind" checked={kind === "donors"} onChange={() => setKind("donors")} />
+            <span>
+              <strong>Donors</strong>, one row per person: contact details, who they gave to, stage, lifetime and this year's giving, last gift,
+              next follow-up and notes.
+            </span>
+          </label>
+          <label className="check">
+            <input type="radio" name="kind" checked={kind === "gifts"} onChange={() => setKind("gifts")} />
+            <span>
+              <strong>Gifts</strong>, one row per gift: date, donor, amount, method, note and whether it's been thanked. Good for your accountant or
+              a year-end tally.
+            </span>
+          </label>
+        </div>
+        <p className="muted small" style={{ margin: 0 }}>
+          {donors.length} donor{donors.length === 1 ? "" : "s"}, {gifts} gift{gifts === 1 ? "" : "s"}. The file opens in Excel, Numbers or Google
+          Sheets, and Many Apply's CSV import reads it back.
+        </p>
       </div>
     </Modal>
   );
