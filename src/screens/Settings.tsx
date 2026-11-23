@@ -5,7 +5,7 @@ import { errorText, getSecret, isTauri, pickFolder, saveFile, setSecret } from "
 import { TOKEN_KEY, testToken } from "../lib/todoist";
 import { zipVault } from "../lib/backup";
 import { zipExtension } from "../lib/extensionZip";
-import { BRIDGE_PORT, newPairingCode, syncPairingCode } from "../lib/bridge";
+import { BRIDGE_PORT, newPairingCode, startExtensionBridge, stopExtensionBridge, syncPairingCode } from "../lib/bridge";
 import { confirmAction } from "../components/dialogs";
 import type { Settings } from "../lib/model";
 import { todayISO } from "../lib/util";
@@ -130,29 +130,70 @@ export function SettingsScreen() {
           </button>
           <span className="muted small">A zip for Chrome, Edge, Brave or Arc.</span>
         </div>
-        <ol className="small soft" style={{ margin: "0 0 12px", paddingLeft: 20, lineHeight: 1.6 }}>
-          <li>Unzip <code>many-apply-extension.zip</code> and keep the folder somewhere it won't be deleted, like Documents. Chrome loads it from there.</li>
-          <li>In Chrome, go to <code>chrome://extensions</code> (type it in the address bar).</li>
-          <li>Turn on <strong>Developer mode</strong>, top right.</li>
-          <li>Click <strong>Load unpacked</strong> and choose the <code>many-apply-extension</code> folder.</li>
-          <li>Click the puzzle-piece icon in the toolbar and pin <strong>Many Apply: Save grant</strong>.</li>
-          <li>Click the extension and enter the pairing code below.</li>
-        </ol>
-        <div className="row">
-          <span className="soft">Pairing code</span>
-          <code style={{ fontSize: 18, letterSpacing: "0.15em", padding: "4px 10px" }}>{s.pairingCode || "——————"}</code>
-          <button
-            className="btn small"
-            onClick={async () => {
-              const code = newPairingCode();
-              await update((x) => ({ ...x, pairingCode: code }));
-              await syncPairingCode(code);
-              toast("New pairing code. Enter it in the extension.");
-            }}
-          >
-            New code
-          </button>
-        </div>
+        {s.pairingEnabled ? (
+          <>
+            <ol className="small soft" style={{ margin: "0 0 12px", paddingLeft: 20, lineHeight: 1.6 }}>
+              <li>Unzip <code>many-apply-extension.zip</code> and keep the folder somewhere it won't be deleted, like Documents. Chrome loads it from there.</li>
+              <li>In Chrome, go to <code>chrome://extensions</code> (type it in the address bar).</li>
+              <li>Turn on <strong>Developer mode</strong>, top right.</li>
+              <li>Click <strong>Load unpacked</strong> and choose the <code>many-apply-extension</code> folder.</li>
+              <li>Click the puzzle-piece icon in the toolbar and pin <strong>Many Apply: Save grant</strong>.</li>
+              <li>Click the extension and enter the pairing code below.</li>
+            </ol>
+            <div className="row">
+              <span className="soft">Pairing code</span>
+              <code style={{ fontSize: 18, letterSpacing: "0.15em", padding: "4px 10px" }}>{s.pairingCode || "——————"}</code>
+              <button
+                className="btn small"
+                onClick={async () => {
+                  try {
+                    const code = newPairingCode();
+                    await update((x) => ({ ...x, pairingCode: code }));
+                    await syncPairingCode(code);
+                    toast("New pairing code. Enter it in the extension.");
+                  } catch (e) {
+                    toast(`Couldn't make a new code: ${errorText(e)}`, "error");
+                  }
+                }}
+              >
+                New code
+              </button>
+              <button
+                className="btn small"
+                onClick={async () => {
+                  try {
+                    stopExtensionBridge();
+                    await update((x) => ({ ...x, pairingEnabled: false, pairingCode: "" }));
+                    await syncPairingCode("").catch(() => {});
+                    toast("Extension access turned off.");
+                  } catch (e) {
+                    toast(`Couldn't turn it off: ${errorText(e)}`, "error");
+                  }
+                }}
+              >
+                Turn off
+              </button>
+            </div>
+          </>
+        ) : (
+          <div className="row">
+            <span className="soft">Extension access is off.</span>
+            <button
+              className="btn small"
+              onClick={async () => {
+                try {
+                  await update((x) => ({ ...x, pairingEnabled: true, pairingCode: "" }));
+                  await startExtensionBridge();
+                  toast("Extension access turned on. Enter the new code in the extension.");
+                } catch (e) {
+                  toast(`Couldn't turn it on: ${errorText(e)}`, "error");
+                }
+              }}
+            >
+              Turn on
+            </button>
+          </div>
+        )}
         <p className="muted small" style={{ marginBottom: 0 }}>
           To update the extension, download it again, replace the folder's contents and click the reload arrow on its card in <code>chrome://extensions</code>.
           Grants you save while Many Apply is closed wait in the extension until it opens.

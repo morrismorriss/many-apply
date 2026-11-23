@@ -2,7 +2,7 @@ import { create } from "zustand";
 import type { VaultFS } from "./lib/fs/types";
 import { MemoryFS } from "./lib/fs/memory";
 import { TauriFS } from "./lib/fs/tauri";
-import { errorText, getPref, isTauri, setPref } from "./lib/platform";
+import { PAIRING_KEY, errorText, getPref, isTauri, setPref, setSecret } from "./lib/platform";
 import { sampleVault } from "./lib/sample";
 import {
   createGrant,
@@ -158,7 +158,11 @@ export const useStore = create<State>((set, get) => {
     const { fs, data } = get();
     if (!fs || !data?.settings.keepIcsUpdated) return;
     markWrite();
-    await fs.writeText(".manyapply/calendar.ics", toICS(calendarEvents(data.grants)));
+    try {
+      await fs.writeText(".manyapply/calendar.ics", toICS(calendarEvents(data.grants)));
+    } catch (e) {
+      console.warn("Couldn't update calendar.ics:", errorText(e));
+    }
   }, 1500);
 
   const withTodoist = async (fn: (token: string, s: Settings) => Promise<void>) => {
@@ -329,7 +333,8 @@ export const useStore = create<State>((set, get) => {
       }
       const g = await createGrant(fs, { ...partial, client: clients[0], clients }, body);
       await get().reload();
-      if (g.fm.status === "planning") await get().setStatus(g.folder, "planning");
+      // The grant was created already in planning, so setStatus's "moved into planning" check won't fire.
+      if (g.fm.status === "planning") await get().createPlanningTasks(g.folder);
       writeIcs();
       return g;
     },
@@ -486,6 +491,13 @@ export const useStore = create<State>((set, get) => {
       set({ data: { ...d, settings } });
       markWrite();
       await saveSettings(get().fs!, settings);
+      if (settings.pairingCode !== d.settings.pairingCode) {
+        try {
+          await setSecret(PAIRING_KEY, settings.pairingCode || null);
+        } catch (e) {
+          console.warn("Couldn't save the pairing code:", errorText(e));
+        }
+      }
       if (settings.keepIcsUpdated) writeIcs();
     },
     async mutate(fn) {

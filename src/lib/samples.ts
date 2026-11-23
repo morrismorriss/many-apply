@@ -4,7 +4,7 @@
 // are never offered for another client's application.
 import { moveWithFile, renameGrantReferences } from "./move";
 import { parseFrontmatter, stringifyFrontmatter } from "./frontmatter";
-import { basename, dirname, joinPath, type VaultFS } from "./fs/types";
+import { basename, dirname, isSafeRelPath, isSafeSegment, joinPath, safeFileName, type VaultFS } from "./fs/types";
 import { asArray, slugify, str } from "./util";
 import { ME } from "./model";
 
@@ -95,7 +95,8 @@ export function sampleOwner(s: { path: string }): string {
 
 /** Vault-relative path of a sample's media file, or "" if it has none. */
 export function sampleFilePath(s: WorkSample): string {
-  return s.fm.file ? `samples/${joinPath(dirname(s.path), s.fm.file)}` : "";
+  const file = safeFileName(s.fm.file);
+  return file ? `samples/${joinPath(dirname(s.path), file)}` : "";
 }
 
 /** Samples a client may send: their own, then Shared. Never another client's. */
@@ -127,7 +128,7 @@ export function sampleCaption(s: WorkSample): string {
 }
 
 export function normalizeSample(raw: Record<string, unknown>, path: string, body: string): WorkSample {
-  const file = str(raw.file).trim();
+  const file = safeFileName(str(raw.file));
   const url = str(raw.url).trim();
   const kind = SAMPLE_KINDS.includes(raw.kind as SampleKind)
     ? (raw.kind as SampleKind)
@@ -160,6 +161,7 @@ export async function readSample(fs: VaultFS, p: string): Promise<WorkSample> {
 }
 
 export async function writeSample(fs: VaultFS, s: WorkSample) {
+  if (!isSafeRelPath(s.path)) throw new Error("Refusing to write an unsafe sample path");
   await fs.writeText(`samples/${s.path}`, stringifyFrontmatter(s.fm, s.body, SAMPLE_ORDER));
 }
 
@@ -182,6 +184,7 @@ export interface NewSample {
 }
 
 export async function createSample(fs: VaultFS, folder: string, n: NewSample): Promise<WorkSample> {
+  if (!isSafeSegment(folder)) throw new Error("Refusing to write an unsafe sample folder");
   await fs.mkdir(`samples/${folder}`);
   const ext = n.file ? extOf(n.file.name) : "";
   const base = await freeBase(fs, folder, n.title, ext);
@@ -223,8 +226,9 @@ export async function moveSample(fs: VaultFS, s: WorkSample, owner: string): Pro
 
 /** Paths (vault-relative) to move to trash when a sample is deleted. */
 export function samplePaths(s: WorkSample): string[] {
+  const md = isSafeRelPath(s.path) ? `samples/${s.path}` : "";
   const f = sampleFilePath(s);
-  return [`samples/${s.path}`, ...(f ? [f] : [])];
+  return [...(md ? [md] : []), ...(f ? [f] : [])];
 }
 
 /** Record that a sample was sent with a grant. */

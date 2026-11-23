@@ -174,12 +174,14 @@ function Timeline() {
   // Stack dots that land close together.
   pts.sort((a, b) => a.date.localeCompare(b.date));
   const lanes: number[] = [];
-  const placed = pts.map((p) => {
-    const x = (daysBetween(today, fromISO(p.date)!) / 90) * 100;
+  const placed = pts.flatMap((p) => {
+    const day = fromISO(p.date);
+    if (!day) return [];
+    const x = (daysBetween(today, day) / 90) * 100;
     let lane = 0;
     while (lanes[lane] !== undefined && x - lanes[lane] < 2.2) lane++;
     lanes[lane] = x;
-    return { ...p, x, lane };
+    return [{ ...p, x, lane }];
   });
   const ticks: { x: number; label: string }[] = [];
   for (let i = 0; i <= 3; i++) {
@@ -187,7 +189,7 @@ function Timeline() {
     const x = (daysBetween(today, d) / 90) * 100;
     if (x <= 100) ticks.push({ x, label: MONTH_NAMES[d.getMonth()].slice(0, 3) });
   }
-  if (!pts.length) return <p className="muted">No deadlines in the next 90 days.</p>;
+  if (!placed.length) return <p className="muted">No deadlines in the next 90 days.</p>;
   return (
     <div className="timeline">
       <div className="axis" />

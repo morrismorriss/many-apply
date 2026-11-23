@@ -211,7 +211,8 @@ export function planDonorImport(existing: Donor[], rows: Record<string, string>[
       if (amount <= 0) return;
       const ack = one("acknowledged");
       const gift: Gift = { date, amount, method: one("gift_method"), note: one("gift_note"), acknowledged: ack ? truthy(ack) : false, to: client };
-      if (fm.gifts.some((g) => g.date === gift.date && g.amount === gift.amount)) {
+      // Same date and amount to the same client is the same gift; to different clients they are separate gifts.
+      if (fm.gifts.some((g) => g.date === gift.date && g.amount === gift.amount && (g.to || fm.gave_to[0] || target) === gift.to)) {
         duplicateGifts++;
         return;
       }

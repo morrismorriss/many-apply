@@ -98,8 +98,9 @@ export async function tasksForReport(token: string, settings: Settings, g: Grant
   const desc = [r.notes, `Many Apply: grants/${g.folder}`].filter(Boolean).join("\n");
   const ids = [await createTask(token, { content: `${r.title}: ${g.fm.title}`, due_date: r.due, description: desc, project_id: projectId })];
   const days = settings.todoist.reportReminderDays;
-  if (days) {
-    const due = toISO(addDays(fromISO(r.due)!, -days));
+  const dueDate = fromISO(r.due);
+  if (days && dueDate) {
+    const due = toISO(addDays(dueDate, -days));
     if (due >= toISO(new Date()))
       ids.push(await createTask(token, { content: `Start ${r.title.toLowerCase()}: ${g.fm.title}`, due_date: due, description: desc, project_id: projectId }));
   }

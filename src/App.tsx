@@ -5,6 +5,7 @@ import { useStore } from "./store";
 import { Sidebar } from "./components/Sidebar";
 import { Drawer } from "./components/Drawer";
 import { DialogHost } from "./components/dialogs";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Dashboard } from "./screens/Dashboard";
 import { Research } from "./screens/Research";
 import { Pipeline } from "./screens/Pipeline";
@@ -20,7 +21,7 @@ import { DraftEditor } from "./screens/DraftEditor";
 import { BudgetBuilder } from "./screens/BudgetBuilder";
 import { Welcome } from "./screens/Welcome";
 import { getPref, isTauri } from "./lib/platform";
-import { startExtensionBridge } from "./lib/bridge";
+import { startExtensionBridge, stopExtensionBridge } from "./lib/bridge";
 import type { Settings } from "./lib/model";
 import { applyDataColors } from "./lib/charts";
 
@@ -71,9 +72,8 @@ export default function App() {
 
   useEffect(() => {
     if (!isTauri || !data) return;
-    let stop: (() => void) | undefined;
-    void startExtensionBridge().then((s) => (stop = s));
-    return () => stop?.();
+    void startExtensionBridge().catch((e) => console.error("Couldn't start the Chrome extension bridge:", e));
+    return () => stopExtensionBridge();
   }, [!!data]);
 
   useEffect(() => {
@@ -118,8 +118,16 @@ export default function App() {
   return (
     <div className="app">
       <Sidebar />
-      <main className={`main${drawer && pinned ? " with-drawer" : ""}`}>{screen}</main>
-      {drawer && <Drawer target={drawer} />}
+      <main className={`main${drawer && pinned ? " with-drawer" : ""}`}>
+        <ErrorBoundary key={JSON.stringify(route)} onReset={() => useStore.getState().go({ screen: "dashboard" })}>
+          {screen}
+        </ErrorBoundary>
+      </main>
+      {drawer && (
+        <ErrorBoundary key={JSON.stringify(drawer)} onReset={() => useStore.getState().closeDrawer()}>
+          <Drawer target={drawer} />
+        </ErrorBoundary>
+      )}
       <DialogHost />
       <div className="toasts" aria-live="polite">
         {toasts.map((t) => (
