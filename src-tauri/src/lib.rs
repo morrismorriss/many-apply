@@ -103,9 +103,14 @@ async fn fetch_feed(url: String) -> Result<String, String> {
     if resp.content_length().is_some_and(|n| n as usize > MAX) {
         return Err("That feed is too big (over 5 MB)".into());
     }
-    let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
-    if bytes.len() > MAX {
-        return Err("That feed is too big (over 5 MB)".into());
+    // Read in pieces and stop at the cap, so a feed that doesn't say its size can't fill memory.
+    let mut resp = resp;
+    let mut bytes: Vec<u8> = Vec::new();
+    while let Some(chunk) = resp.chunk().await.map_err(|e| e.to_string())? {
+        if bytes.len() + chunk.len() > MAX {
+            return Err("That feed is too big (over 5 MB)".into());
+        }
+        bytes.extend_from_slice(&chunk);
     }
     Ok(String::from_utf8_lossy(&bytes).into_owned())
 }

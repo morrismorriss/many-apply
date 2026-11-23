@@ -2,6 +2,7 @@
 // donor CSV import recognizes, so an export can be imported back (into this vault or another).
 import Papa from "papaparse";
 import { summarize, type Donor } from "./donors";
+import { csvSafe } from "./csvImport";
 
 const BOM = "﻿";
 
@@ -17,7 +18,7 @@ export function donorsCsv(donors: Donor[], clientName: (slug: string) => string,
       d.fm.name, d.fm.email, d.fm.phone, d.fm.address, d.fm.organization, clientName(d.fm.client), d.fm.stage, d.fm.tags.join(", "),
       s.lifetime, s.thisYear, d.fm.gifts.length, s.lastGift?.date ?? "", s.lastGift?.amount ?? "", s.unthanked,
       d.fm.next_followup, d.fm.next_step, d.body.trim(),
-    ];
+    ].map(csvSafe);
   });
   return BOM + Papa.unparse({ fields, data }) + "\n";
 }
@@ -27,6 +28,6 @@ export function giftsCsv(donors: Donor[], clientName: (slug: string) => string):
   const data = donors
     .flatMap((d) => d.fm.gifts.map((g) => ({ d, g })))
     .sort((a, b) => b.g.date.localeCompare(a.g.date) || a.d.fm.name.localeCompare(b.d.fm.name))
-    .map(({ d, g }) => [g.date, d.fm.name, d.fm.email, clientName(d.fm.client), g.amount, g.method, g.note, g.acknowledged ? "yes" : "no"]);
+    .map(({ d, g }) => [g.date, d.fm.name, d.fm.email, clientName(d.fm.client), g.amount, g.method, g.note, g.acknowledged ? "yes" : "no"].map(csvSafe));
   return BOM + Papa.unparse({ fields, data }) + "\n";
 }

@@ -676,3 +676,21 @@ describe("no reporting needed", () => {
     expect(normalizeGrantForTest({ title: "A" }).no_reporting).toBe(false);
   });
 });
+
+describe("CSV exports can't carry live spreadsheet formulas", () => {
+  it("neutralizes formula-like text and reads it back unchanged", async () => {
+    const { csvSafe } = await import("../src/lib/csvImport");
+    expect(csvSafe('=HYPERLINK("http://evil.example","x")')).toBe(`'=HYPERLINK("http://evil.example","x")`);
+    expect(csvSafe("@SUM(A1)")).toBe("'@SUM(A1)");
+    expect(csvSafe("-250")).toBe("-250");
+    expect(csvSafe(1500)).toBe("1500");
+    expect(csvSafe("Project Grant")).toBe("Project Grant");
+    const g = { folder: "x", fm: normalizeGrantForTest({ title: "=cmd|' /C calc'!A0", funder: "f" }), body: "", lastEdited: 0 } as never;
+    const { exportGrantsCsv } = await import("../src/lib/csvImport");
+    const csv = exportGrantsCsv([g], (s) => s, (s) => s);
+    expect(csv).toContain("'=cmd");
+    expect(readCsv(csv).rows[0].title).toBe("=cmd|' /C calc'!A0");
+    const lines = parseBudgetCsv(stringifyBudgetCsv([{ id: "1", category: "Fees", type: "Expense", line_item: "+1 (412) 555-0100 line", quantity: null, rate: null, amount: -50, notes: "@note" } as never]));
+    expect(lines[0]).toMatchObject({ line_item: "+1 (412) 555-0100 line", notes: "@note", amount: -50 });
+  });
+});
