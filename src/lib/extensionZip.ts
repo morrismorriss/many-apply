@@ -1,4 +1,4 @@
-// The Chrome extension ships inside the app, so it can be saved as a zip from Settings
+// The browser extension ships inside the app, so it can be saved as a zip from Settings
 // without going to GitHub, and always matches the app's version.
 import JSZip from "jszip";
 

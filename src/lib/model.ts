@@ -222,7 +222,7 @@ export interface Settings {
   };
   importPresets: ImportPreset[];
   keepIcsUpdated: boolean;
-  /** Whether the Chrome-extension listener runs. */
+  /** Whether the browser-extension listener runs. */
   pairingEnabled: boolean;
   pairingCode: string;
   /** Opportunity feeds (RSS/Atom) shown in the sidebar panel. */

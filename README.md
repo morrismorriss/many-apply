@@ -39,7 +39,7 @@ On first launch, choose a folder for your vault (an empty folder is fine), or ex
 | Clients | For freelance grant writers. A client switcher at the top of the sidebar filters every screen. Profiles, per-client budget templates and Todoist projects, and "Share client folder" as a zip. |
 | Reports | Year in review (with a copyable summary), requested vs. awarded by year, win rate by type and funder type, funding by funder, a deadline heatmap, average days to decision, individual giving (retention, new vs. returning donors, top donors) and document readiness (which standard documents each client is missing or about to lose). Show or hide each report. Filter by year, tag, project and client. CSV export. |
 | Import | A plain-language guide next to a CSV importer for Notion, Google Sheets, Excel and Airtable exports: column matching, status matching, preview with warnings and duplicate detection, saved mappings, one-click undo. Export everything back to CSV. |
-| Settings | Vault folder, themes (light, dark, pink, build your own), chart and status colors (palettes, or pick each one), Todoist token (kept in the OS keychain), prep-task template, backup to zip, Chrome extension download and pairing. |
+| Settings | Vault folder, themes (light, dark, pink, build your own), chart and status colors (palettes, or pick each one), Todoist token (kept in the OS keychain), prep-task template, backup to zip, browser extension (Chrome and Firefox) download and pairing. |
 
 ## Screenshots
 
@@ -112,12 +112,15 @@ Paste your personal API token in Settings (Todoist → Settings → Integrations
 
 Task IDs are saved in `todoist_task_ids`.
 
-## Chrome extension
+## Browser extension (Chrome and Firefox)
 
 The `extension/` folder is a Manifest V3 extension that saves the page you're on as a new opportunity. Highlighted text goes into Eligibility or Questions, and dates and dollar amounts on the page are offered as suggestions.
 
-1. Go to `chrome://extensions`, turn on **Developer mode**, click **Load unpacked** and choose the `extension` folder (or unzip `extension.zip` from a release).
-2. In Many Apply, open **Settings → Chrome extension** and copy the six-digit pairing code into the extension.
+The same folder works in Chrome-family browsers (Chrome, Edge, Brave, Arc) and in Firefox 128 or later.
+
+1. Chrome: go to `chrome://extensions`, turn on **Developer mode**, click **Load unpacked** and choose the `extension` folder (or unzip `extension.zip` from a release).
+   Firefox: go to `about:debugging#/runtime/this-firefox`, click **Load Temporary Add-on…** and choose `extension/manifest.json`. Firefox drops temporary add-ons when it quits; to install it for good, sign it on addons.mozilla.org (it can be unlisted) with `npx web-ext sign --channel=unlisted --source-dir extension` and install the `.xpi` it produces.
+2. In Many Apply, open **Settings → Browser extension** and copy the six-digit pairing code into the extension.
 
 The extension talks only to the desktop app on `127.0.0.1:47321`, and every request needs the pairing code. If the app is closed, grants wait in the extension and are sent when it opens. Nothing leaves your computer.
 
@@ -157,7 +160,7 @@ src/
   screens/      one file per screen
   store.ts      app state (zustand)
 src-tauri/      Rust shell: keychain, opening links, the extension listener
-extension/      Chrome extension
+extension/      Browser extension (Chrome and Firefox, one Manifest V3 source)
 tests/          unit tests
 ```
 

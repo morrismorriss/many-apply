@@ -1,4 +1,4 @@
-//! Local listener for the Chrome extension (Phase 2).
+//! Local listener for the browser extension (Phase 2).
 //!
 //! Binds to 127.0.0.1 only. Every request that hands over data must carry the pairing code shown in
 //! Settings, so other software on the machine (or web pages) can't inject grants. On top of that:

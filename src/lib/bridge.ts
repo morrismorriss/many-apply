@@ -1,4 +1,4 @@
-// Receives grants from the Chrome extension through the desktop app's local listener (127.0.0.1 only).
+// Receives grants from the browser extension through the desktop app's local listener (127.0.0.1 only).
 import { errorText, isTauri } from "./platform";
 import { useStore } from "../store";
 import { ME, STATUSES, type Status } from "./model";
@@ -74,7 +74,7 @@ export async function startExtensionBridge(): Promise<() => void> {
     await syncPairingCode(code);
   } catch (e) {
     console.error("Couldn't set the extension pairing code:", errorText(e));
-    st.toast("Couldn't start the Chrome extension listener.", "warn");
+    st.toast("Couldn't start the browser extension listener.", "warn");
   }
   let lastClients = "";
   const pushClients = () => {
@@ -120,9 +120,9 @@ export async function startExtensionBridge(): Promise<() => void> {
         },
         body,
       );
-      s.toast(`Added from Chrome: ${created.fm.title}`, "ok", { label: "Open", run: () => s.openDrawer({ kind: "grant", id: created.folder }) });
+      s.toast(`Added from the browser: ${created.fm.title}`, "ok", { label: "Open", run: () => s.openDrawer({ kind: "grant", id: created.folder }) });
     } catch (err) {
-      s.toast(`Couldn't add the grant from Chrome: ${errorText(err)}`, "error");
+      s.toast(`Couldn't add the grant from the browser: ${errorText(err)}`, "error");
     }
   });
   const stop = () => {
