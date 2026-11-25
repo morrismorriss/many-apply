@@ -46,7 +46,7 @@ jobs:
           releaseName: Many Apply ${{ github.ref_name }}
           releaseBody: |
             Unsigned build. See the README for install steps (Mac: right-click the app, then Open).
-            The Chrome extension is in extension.zip: unzip it and use "Load unpacked" in chrome://extensions.
+            The browser extension is in extension.zip. Chrome, Edge, Brave, Arc: unzip it and use "Load unpacked" in chrome://extensions. Firefox: use "Load Temporary Add-on" in about:debugging and pick manifest.json.
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}

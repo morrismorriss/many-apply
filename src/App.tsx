@@ -72,7 +72,7 @@ export default function App() {
 
   useEffect(() => {
     if (!isTauri || !data) return;
-    void startExtensionBridge().catch((e) => console.error("Couldn't start the Chrome extension bridge:", e));
+    void startExtensionBridge().catch((e) => console.error("Couldn't start the browser extension bridge:", e));
     return () => stopExtensionBridge();
   }, [!!data]);
 

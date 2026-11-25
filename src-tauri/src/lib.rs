@@ -4,7 +4,7 @@
 //! fs plugin. Rust adds three small things the browser can't do on its own:
 //! - storing the Todoist token in the OS keychain (never in the vault),
 //! - opening links in the default browser, and vault files (work samples) in their default app,
-//! - a tiny HTTP listener on 127.0.0.1 so the Chrome extension can hand over grants.
+//! - a tiny HTTP listener on 127.0.0.1 so the browser extension can hand over grants.
 
 mod bridge;
 

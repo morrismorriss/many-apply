@@ -109,7 +109,7 @@ export function SettingsScreen() {
         </button>
       </Section>
 
-      <Section title="Chrome extension">
+      <Section title="Browser extension">
         <p className="soft small" style={{ marginTop: 0 }}>
           Save grants from any web page. The extension talks only to this app, on <code>127.0.0.1:{BRIDGE_PORT}</code>. Nothing leaves your computer.
           {!isTauri && " (Available in the desktop app.)"}
@@ -128,17 +128,27 @@ export function SettingsScreen() {
           >
             Download the extension…
           </button>
-          <span className="muted small">A zip for Chrome, Edge, Brave or Arc.</span>
+          <span className="muted small">One zip for Chrome, Edge, Brave, Arc and Firefox.</span>
         </div>
         {s.pairingEnabled ? (
           <>
+            <p className="small soft" style={{ margin: "0 0 4px" }}><strong>Chrome, Edge, Brave or Arc</strong></p>
             <ol className="small soft" style={{ margin: "0 0 12px", paddingLeft: 20, lineHeight: 1.6 }}>
-              <li>Unzip <code>many-apply-extension.zip</code> and keep the folder somewhere it won't be deleted, like Documents. Chrome loads it from there.</li>
-              <li>In Chrome, go to <code>chrome://extensions</code> (type it in the address bar).</li>
+              <li>Unzip <code>many-apply-extension.zip</code> and keep the folder somewhere it won't be deleted, like Documents. The browser loads it from there.</li>
+              <li>Go to <code>chrome://extensions</code> (type it in the address bar; Edge uses <code>edge://extensions</code>).</li>
               <li>Turn on <strong>Developer mode</strong>, top right.</li>
               <li>Click <strong>Load unpacked</strong> and choose the <code>many-apply-extension</code> folder.</li>
               <li>Click the puzzle-piece icon in the toolbar and pin <strong>Many Apply: Save grant</strong>.</li>
               <li>Click the extension and enter the pairing code below.</li>
+            </ol>
+            <p className="small soft" style={{ margin: "0 0 4px" }}><strong>Firefox</strong></p>
+            <ol className="small soft" style={{ margin: "0 0 12px", paddingLeft: 20, lineHeight: 1.6 }}>
+              <li>Unzip <code>many-apply-extension.zip</code>.</li>
+              <li>Go to <code>about:debugging#/runtime/this-firefox</code> (type it in the address bar).</li>
+              <li>Click <strong>Load Temporary Add-on…</strong> and choose <code>manifest.json</code> inside the <code>many-apply-extension</code> folder.</li>
+              <li>Click the puzzle-piece icon in the toolbar, then the gear next to <strong>Many Apply: Save grant</strong>, and pin it.</li>
+              <li>Click the extension and enter the pairing code below.</li>
+              <li>Firefox removes temporary add-ons when it quits, so repeat these steps after a restart. Queued grants and the pairing code are kept.</li>
             </ol>
             <div className="row">
               <span className="soft">Pairing code</span>
